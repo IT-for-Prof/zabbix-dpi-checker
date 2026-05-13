@@ -1,0 +1,14 @@
+.venv-dev/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.worktrees/
+
+# Local-only tooling state — not for upstream.
+.serena/
+.mcp.json
+.codex/
+docs/superpowers/

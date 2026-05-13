@@ -1,0 +1,367 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: a8ca4de646744dee8d2111083a5894ff
+      name: 'Templates/DPI Mesh'
+  templates:
+    - uuid: f8f6397e4c4248a5867ce33ea92d7219
+      template: 'DPI Mesh Blocking Detection'
+      name: 'DPI Mesh: Blocking Detection'
+      description: |
+        Detects cross-region blocking of own services by running protocol-aware
+        probes from this host (a "vantage point") against every host in hostgroup
+        DPI Targets. Service availability and cert health are NOT in scope —
+        attach Zabbix's stock templates for those.
+        
+        Wire-up on this vantage host: deploy /opt/dpi-probe/dpi_probe via
+        deploy/install-prober.sh, and set host macro {$DPI.API_TOKEN}
+        (Secret type) — a Zabbix API token under the read-only dpi-vantage
+        user. LLD then auto-creates one item per (target, kind, port) tuple.
+        Override {$DPI.API_URL} only if your Zabbix frontend isn't at the
+        template default URL.
+        
+        Wire-up on each target host: add to hostgroup "DPI Targets" and set host
+        macros {$DPI.DNS}, {$DPI.REGION}, {$DPI.KINDS}.
+      groups:
+        - name: 'Templates/DPI Mesh'
+      discovery_rules:
+        - uuid: 667a39dc8c0844b79bb4b32aa98e8840
+          name: 'DPI targets discovery'
+          type: HTTP_AGENT
+          key: dpi.targets.discovery
+          delay: 1h
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#KIND}'
+                value: '{$DPI.EXCLUDE_KINDS}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: A
+              - macro: '{#TARGET}'
+                value: '^{HOST.HOST}$'
+                operator: NOT_MATCHES_REGEX
+                formulaid: B
+              - macro: '{#TARGET}'
+                value: '{$DPI.SELF_TARGETS}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: C
+          description: |
+            Queries the Zabbix API for all hosts visible to the vantage's API token
+            (scoped to hostgroup "DPI Targets" by the dpi-vantage role/group ACL),
+            reads their {$DPI.DNS}, {$DPI.REGION}, {$DPI.KINDS}, {$DPI.SNI},
+            {$DPI.CERT_FINGERPRINT} macros,
+            and expands the comma-separated {$DPI.KINDS} list into one LLD record
+            per (host, kind, port) tuple.
+            
+            JavaScript preprocessing handles the CSV split because Zabbix JSONPath
+            cannot iterate over a single string field as multiple rows. Records
+            targeting this vantage host (self) are filtered out via the LLD filter
+            on {#TARGET}.
+          item_prototypes:
+            - uuid: 948c6462e3ec4a1eb5906c47c078ae48
+              name: 'DPI bytes before fail [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: DEPENDENT
+              key: 'dpi.bytes_before_fail[{#TARGET},{#KIND},{#PORT}]'
+              delay: '0'
+              history: 90d
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.bytes_before_fail
+              master_item:
+                key: 'dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP},--with-control]'
+            - uuid: f9c2f286bb374ed885b34e293189e011
+              name: 'DPI latency ms [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: DEPENDENT
+              key: 'dpi.latency_ms[{#TARGET},{#KIND},{#PORT}]'
+              delay: '0'
+              history: 90d
+              value_type: FLOAT
+              units: ms
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.latency_ms
+              master_item:
+                key: 'dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP},--with-control]'
+            - uuid: c9c207a55fd44bf8862d0bb1f9938e73
+              name: 'DPI reason [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: DEPENDENT
+              key: 'dpi.reason[{#TARGET},{#KIND},{#PORT}]'
+              delay: '0'
+              history: 90d
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.reason
+              master_item:
+                key: 'dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP},--with-control]'
+            - uuid: 250445ac782140e2a6850698f412ba83
+              name: 'DPI resolved IP [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: DEPENDENT
+              key: 'dpi.resolved_ip[{#TARGET},{#KIND},{#PORT}]'
+              delay: '0'
+              history: 30d
+              value_type: CHAR
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.resolved_ip
+              master_item:
+                key: 'dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP},--with-control]'
+            - uuid: 91c958d9435b4796a7df12023c7f62c8
+              name: 'DPI discriminator [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: DEPENDENT
+              key: 'dpi.discriminator[{#TARGET},{#KIND},{#PORT}]'
+              delay: '0'
+              history: 90d
+              value_type: CHAR
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.discriminator
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: ''
+              master_item:
+                key: 'dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP},--with-control]'
+            - uuid: 3d344194e1674dd987a08ffe9e0acb6b
+              name: 'DPI verdict [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: DEPENDENT
+              key: 'dpi.verdict[{#TARGET},{#KIND},{#PORT}]'
+              delay: '0'
+              history: 90d
+              value_type: CHAR
+              trends: '0'
+              valuemap:
+                name: 'DPI verdict'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.verdict
+              master_item:
+                key: 'dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP},--with-control]'
+              tags:
+                - tag: kind
+                  value: '{#KIND}'
+                - tag: region
+                  value: '{#REGION}'
+                - tag: target
+                  value: '{#TARGET}'
+              trigger_prototypes:
+                - uuid: 3378de578a74466faf7b71ec1edf4e7f
+                  expression: 'nodata(/DPI Mesh Blocking Detection/dpi.verdict[{#TARGET},{#KIND},{#PORT}],{$DPI.NODATA_WINDOW},"strict")=1'
+                  name: 'DPI vantage probe stale: {#TARGET} {#KIND}:{#PORT} from {HOST.NAME}'
+                  priority: INFO
+                  description: |
+                    This specific vantage has not produced a dpi.verdict for {#TARGET} {#KIND}:{#PORT} in the last {$DPI.NODATA_WINDOW} (default 1h = 12 missed probe cycles at 5m interval). DIAGNOSTIC ONLY -- no dependencies, no impact on the aggregator's consensus triggers.
+                    
+                    Likely causes:
+                    - dpi_probe binary missing / broken / unreadable by zabbix user on this vantage (re-run deploy/install-prober.sh)
+                    - This vantage host unreachable / its zabbix-proxy down
+                    - External check timing out (raise {$DPI.PROBE_TIMEOUT} or check target)
+                    - HAProxy / API access broken for LLD
+                    
+                    Notes:
+                    - The aggregator's consensus triggers (DPI Mesh Aggregator template) will quietly adapt: vantages_total drops by 1, severity tiers shift accordingly. Without this per-vantage diagnostic trigger, a single dead probe is silent.
+                    - This Info trigger is diagnostic and produces ONE event per dead (target, kind, port) on this vantage, not aggregate-level noise. Stays on the vantage host -- the aggregator has its own stale sentinel for a frozen aggregator scenario.
+                  manual_close: 'YES'
+            - uuid: 221ac95d830a43d9902d429c185ecce1
+              name: 'DPI probe [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: EXTERNAL
+              key: 'dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP},--with-control]'
+              delay: '{$DPI.INTERVAL}'
+              history: 30d
+              value_type: TEXT
+              trends: '0'
+              description: |
+                Master item: executes dpi_probe and stores the full JSON verdict.
+                Dependent items extract individual fields.
+              tags:
+                - tag: kind
+                  value: '{#KIND}'
+                - tag: region
+                  value: '{#REGION}'
+                - tag: target
+                  value: '{#TARGET}'
+          url: '{$DPI.API_URL}'
+          posts: |
+            {
+              "jsonrpc": "2.0",
+              "method": "host.get",
+              "params": {
+                "output": ["host"],
+                "selectMacros": ["macro", "value"]
+              },
+              "id": 1,
+              "auth": "{$DPI.API_TOKEN}"
+            }
+          headers:
+            - name: Content-Type
+              value: application/json
+          request_method: POST
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  // Convert Zabbix host.get result into {data: [...]} LLD rows,
+                  // expanding the comma-separated {$DPI.KINDS} per host.
+                  var resp = JSON.parse(value);
+                  if (!resp.result) {
+                    throw "API error: " + JSON.stringify(resp.error || resp);
+                  }
+                  var rows = [];
+                  for (var i = 0; i < resp.result.length; i++) {
+                    var h = resp.result[i];
+                    var macros = {};
+                    for (var j = 0; j < (h.macros || []).length; j++) {
+                      macros[h.macros[j].macro] = h.macros[j].value;
+                    }
+                    var dns = macros["{$DPI.DNS}"] || h.host;
+                    var region = macros["{$DPI.REGION}"] || "";
+                    var sni = macros["{$DPI.SNI}"] || dns;
+                    var certFp = macros["{$DPI.CERT_FINGERPRINT}"] || "";
+                    var kinds = macros["{$DPI.KINDS}"] || "";
+                    var parts = kinds.split(",");
+                    for (var k = 0; k < parts.length; k++) {
+                      var kp = parts[k].trim();
+                      if (!kp) continue;
+                      var colon = kp.indexOf(":");
+                      if (colon < 0) continue;
+                      var kind = kp.substring(0, colon).trim();
+                      var port = kp.substring(colon + 1).trim();
+                      if (!kind || !port) continue;
+                      rows.push({
+                        "{#TARGET}": h.host,
+                        "{#DNS}": dns,
+                        "{#REGION}": region,
+                        "{#KIND}": kind,
+                        "{#PORT}": port,
+                        "{#SNI}": sni,
+                        "{#CERT_FP}": certFp
+                      });
+                    }
+                  }
+                  return JSON.stringify({"data": rows});
+      items:
+        - uuid: 97b9a941168b4ee69f09f04d9957217f
+          name: 'DPI control probe'
+          type: EXTERNAL
+          key: 'dpi_probe[--control-only]'
+          delay: '{$DPI.INTERVAL}'
+          history: 30d
+          value_type: TEXT
+          trends: '0'
+          description: 'Master item for vantage outbound health. Target probes use --with-control and return VANTAGE_UNAVAILABLE when this same control path fails.'
+        - uuid: b3d9e86355ed47d797d042f7877d39d8
+          name: 'DPI control verdict'
+          type: DEPENDENT
+          key: dpi.control_verdict
+          delay: '0'
+          history: 30d
+          value_type: CHAR
+          trends: '0'
+          valuemap:
+            name: 'DPI verdict'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.verdict
+          master_item:
+            key: 'dpi_probe[--control-only]'
+        - uuid: 81af3f918e064fd08c196e0d5754bdf5
+          name: 'DPI control latency ms'
+          type: DEPENDENT
+          key: dpi.control_latency_ms
+          delay: '0'
+          history: 30d
+          value_type: FLOAT
+          units: ms
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.latency_ms
+          master_item:
+            key: 'dpi_probe[--control-only]'
+      tags:
+        - tag: class
+          value: network
+        - tag: component
+          value: security
+        - tag: scope
+          value: availability
+      macros:
+        - macro: '{$DPI.API_TOKEN}'
+          type: SECRET_TEXT
+          description: |
+            Zabbix API token issued under the read-only dpi-vantage user.
+            REQUIRED — empty value disables discovery. One token per vantage
+            for blast-radius isolation and audit. Must be stored as type=Secret
+            (it is by default on this template); host-level override must also
+            use Secret type.
+        - macro: '{$DPI.API_URL}'
+          value: 'https://your-zabbix.example.com/api_jsonrpc.php'
+          description: 'URL of the Zabbix API reachable from this vantage host. Override per vantage to point at your real Zabbix frontend. REQUIRED to be reachable — wrong value causes LLD to fail with non-200 response (e.g. 503 from an L7 LB whose target is unhealthy, or 404 from a typo).'
+        - macro: '{$DPI.EXCLUDE_KINDS}'
+          value: ^$
+          description: 'Regex matching DPI kind names (smtp, smtps, https, rdp, rdgw, ssh, wireguard, openvpn) that this vantage should NOT probe — used to silence ISP-level outbound port filters (e.g. ISP blocks outbound :25 globally) which produce constant non-OK verdicts unrelated to DPI directional blocking. Default `^$` matches only the empty string, so it filters nothing. Override per-vantage with a regex alternation like `^(smtp|smtps)$` to skip these kinds from that vantage. Complements {$DPI.SELF_TARGETS} which filters by target host.'
+        - macro: '{$DPI.INTERVAL}'
+          value: 5m
+          description: |
+            Polling interval for the master item. 5m is balanced for catching DPI
+            within minutes without overloading the prober. Don't go below 1m unless
+            you've measured impact.
+        - macro: '{$DPI.CERT_FINGERPRINT}'
+          value: ''
+          description: 'Optional expected leaf certificate SHA-256 fingerprint for HTTPS/SMTPS targets. Leave empty to disable certificate pinning; override on target hosts that need MITM/cert-substitution detection.'
+        - macro: '{$DPI.NODATA_WINDOW}'
+          value: 1h
+          description: 'Window for the stale-data trigger. If a verdict item has not produced a value in this long, the stale-data trigger fires (Information severity) and SUPPRESSES the directional-block trigger via dependency — a dead probe must not produce false DPI alerts. Default 1h = 12 missed probe cycles at default 5m interval.'
+        - macro: '{$DPI.PROBE_TIMEOUT}'
+          value: '10'
+          description: |
+            Total budget per probe in seconds — includes DNS, TCP connect, TLS / app
+            handshake, and read. Trade off between probe latency and false positives
+            on heavily loaded targets.
+        - macro: '{$DPI.SELF_TARGETS}'
+          value: ^$
+          description: 'Regex matching DPI target hostnames that this vantage should NOT probe — used to exclude services hosted ON the vantage''s own machine (NAT hairpinning artifacts) or aliased via local /etc/hosts. Default `^$` matches only the empty string, so it filters nothing. Override per-vantage with a regex alternation like `^(mail\.example\.com|relay\.example\.com)$` to skip self-hosted targets from that vantage.'
+      valuemaps:
+        - uuid: c3e70d1759b844bfa5257c9f80eefcb8
+          name: 'DPI verdict'
+          mappings:
+            - value: OK
+              newvalue: 'OK — service reachable'
+            - value: TCP_RST_HANDSHAKE
+              newvalue: 'TCP RST during handshake — port/IP block'
+            - value: TCP_RST_MID_STREAM
+              newvalue: 'TCP RST mid-stream — DPI inline'
+            - value: TLS_RESET_POST_HELLO
+              newvalue: 'TLS RST after ClientHello — SNI-based DPI'
+            - value: TLS_TIMEOUT
+              newvalue: 'TLS handshake hung — scrubber stall'
+            - value: CERT_MISMATCH
+              newvalue: 'Cert fingerprint mismatch — MITM suspicion'
+            - value: BANNER_MISMATCH
+              newvalue: 'Banner mismatch — transparent proxy'
+            - value: REMOTE_HUNGUP_AFTER_CONNECT
+              newvalue: 'Remote hung up after connect — no protocol response'
+            - value: VANTAGE_UNAVAILABLE
+              newvalue: 'Vantage unavailable — control probe failed'
+            - value: DNS_LIE
+              newvalue: 'DNS divergence (system vs DoH)'
+            - value: HTTP_STUB
+              newvalue: 'RKN stub page served'
+            - value: ROUTE_BLACKHOLE
+              newvalue: 'ICMP admin-prohibited / no route'
+            - value: PORT_FILTERED
+              newvalue: 'Port silently filtered — drop rule'
+            - value: REMOTE_DOWN
+              newvalue: 'RST on connect — service down'
+            - value: UDP_BLIND
+              newvalue: 'UDP blind — no pubkey'
+            - value: ERROR_INTERNAL
+              newvalue: 'Probe internal error'

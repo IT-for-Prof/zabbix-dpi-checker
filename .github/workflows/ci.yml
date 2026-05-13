@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install dev tools
+        run: pip install pytest ruff mypy pyyaml
+
+      - name: Ruff lint
+        run: ruff check probe template
+
+      - name: Mypy strict
+        run: mypy --strict probe/lib probe/dpi_probe.py
+
+      - name: Pytest
+        run: pytest -q
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck installer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck deploy/install-prober.sh deploy/deploy-to.sh
+
+      - name: Integration test — deploy-to.sh --from-git pipes installer correctly
+        run: bash deploy/tests/test_deploy_to.sh
+
+  privacy-guard:
+    # Cheap insurance: refuse to merge anything that re-introduces production
+    # hostnames, customer names, real public IPs, or known API tokens into
+    # tracked files. The .gitignore handles ad-hoc plans/notes, but a positive
+    # grep guard catches accidental leaks (re-export of a live template that
+    # captured a host-level override, paste into a code comment, etc.).
+    # LICENSE keeps the maintainer name (required by MIT) — explicitly excluded.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan tracked files for production identifiers
+        run: |
+          # Build the pattern from constants. Add new identifiers here as the
+          # project lifecycle progresses (rotated tokens, retired customers).
+          PATTERN='itforprof|eurotrade|avaks|searegion|voffice24|notarius'
+          PATTERN+='|193\.47\.42|185\.40\.4\.125|5\.129\.200\.253|65\.21\.40\.204'
+          PATTERN+='|31\.128\.49\.198|172\.21\.4\.'
+          PATTERN+='|76fa9875cf180355|e55abb'  # known scoped tokens (prefixes)
+          PATTERN+='|Тютюнник'                 # Cyrillic full name
+          # Exclude LICENSE (MIT copyright line) and this workflow file itself
+          # (the pattern definition above would self-match).
+          if git ls-files \
+             | grep -vE '^(LICENSE|\.github/workflows/ci\.yml)$' \
+             | xargs grep -InE "$PATTERN" 2>/dev/null; then
+            echo "::error::Production identifier found in tracked files."
+            echo "Either redact it, or extend the LICENSE allowlist if it is"
+            echo "legally required (e.g. copyright line)."
+            exit 1
+          fi
+          echo "OK: no production identifiers in tracked files."

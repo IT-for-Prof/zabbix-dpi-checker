@@ -1,0 +1,219 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: a8ca4de646744dee8d2111083a5894ff
+      name: 'Templates/DPI Mesh'
+  templates:
+    - uuid: 65af853f48034c249ec86b5c0650151a
+      template: 'DPI Mesh Aggregator'
+      name: 'DPI Mesh Aggregator'
+      description: 'Mesh-wide consensus layer for DPI Mesh Blocking Detection. Runs on a single phantom host (DPI Mesh Aggregator) and produces ONE alert per (target, kind, port) tuple regardless of vantage count, by aggregating the per-vantage dpi.verdict[] items via last_foreach(/*/...). Separating this from the vantage role eliminates the N-times-fire-per-event noise that per-vantage triggers produce on global outages. The vantage template (DPI Mesh Blocking Detection) remains responsible for probing and dpi.verdict items; this template owns consensus calc items and the 4-tier severity ladder.'
+      groups:
+        - name: 'Templates/DPI Mesh'
+      discovery_rules:
+        - uuid: 59463de4021e4ea7a5d12247599f7c73
+          name: 'DPI targets discovery'
+          type: HTTP_AGENT
+          key: dpi.targets.discovery
+          delay: 1h
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#KIND}'
+                value: '{$DPI.EXCLUDE_KINDS}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: A
+              - macro: '{#TARGET}'
+                value: '{$DPI.SELF_TARGETS}'
+                operator: NOT_MATCHES_REGEX
+                formulaid: B
+          description: 'Same as the vantage template''s LLD: queries Zabbix API for all hosts the dpi-vantage token can see (ACL-scoped to DPI Targets hostgroup), reads their {$DPI.KINDS}, and expands into (target, kind, port) LLD rows. The aggregator''s role is purely consensus -- the discovered rows drive calc items that read /*/dpi.verdict[T,K,P] across the mesh.'
+          item_prototypes:
+            - uuid: d3916e042de847f5abf80d470b8a114a
+              name: 'DPI vantages affected [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: CALCULATED
+              key: 'dpi.affected[{#TARGET},{#KIND},{#PORT}]'
+              delay: '{$DPI.INTERVAL}'
+              history: 30d
+              params: 'count(last_foreach(/*/dpi.verdict[{#TARGET},{#KIND},{#PORT}]),"ne","OK")'
+              description: 'Count of vantages currently reporting any non-OK verdict for this tuple (the complement of peers_ok within vantages_total). Pinning the severity ladder to this item lets trigger expressions use literal-integer comparisons in count(...,#3,"eq",N), avoiding the Zabbix limitation that count()''s pattern argument cannot be a last() expression. affected=1 -> Warning, =2 -> Average, >=3 -> High (gated by peers_ok>0 to keep it distinct from Disaster).'
+            - uuid: 3d9842cf38564b8db955ee506a036477
+              name: 'DPI peers reporting OK [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: CALCULATED
+              key: 'dpi.peers_ok[{#TARGET},{#KIND},{#PORT}]'
+              delay: '{$DPI.INTERVAL}'
+              history: 30d
+              params: 'count(last_foreach(/*/dpi.verdict[{#TARGET},{#KIND},{#PORT}]),"eq","OK")'
+              description: 'Count of vantages currently reporting verdict=OK for this (target, kind, port). Reads /*/dpi.verdict across the entire Zabbix instance (last_foreach), so the aggregator host does NOT need any verdict data of its own. Combined with dpi.vantages_total and dpi.affected, drives the auto-scaling severity ladder.'
+              trigger_prototypes:
+                - uuid: d6479f1852844d1a9f6528e739e0f2ee
+                  expression: 'count(/DPI Mesh Aggregator/dpi.peers_ok[{#TARGET},{#KIND},{#PORT}],#3,"eq","0")=3 and last(/DPI Mesh Aggregator/dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}])>=1'
+                  name: 'DPI Mesh consensus (all vantages affected): {#TARGET} {#KIND}:{#PORT}'
+                  priority: HIGH
+                  opdata: 'peers_ok={ITEM.LASTVALUE1}/{?last(/DPI Mesh Aggregator/dpi.vantages_total[{#TARGET},{#KIND},{#PORT}])} dpi={?last(/DPI Mesh Aggregator/dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}])}'
+                  description: |
+                    Zero vantages report OK on {#TARGET} {#KIND}:{#PORT} for 3 consecutive aggregator cycles. The target is unreachable from every probe location -- no longer a directional block but a global outage.
+
+                    Likely causes:
+                    - Genuine global outage of the target service
+                    - Target firewall change rejecting all traffic
+                    - DNS for the target service expired or misconfigured
+                    - Catastrophic ISP/BGP issue affecting all vantages simultaneously
+
+                    Per-vantage verdicts: check Latest data on host group "DPI Vantages" with key filter dpi.verdict.
+
+                    Severity: HIGH.
+                  manual_close: 'YES'
+                  dependencies:
+                    - name: 'DPI Mesh stale: {#TARGET} {#KIND}:{#PORT}'
+                      expression: 'nodata(/DPI Mesh Aggregator/dpi.peers_ok[{#TARGET},{#KIND},{#PORT}],{$DPI.NODATA_WINDOW},"strict")=1'
+                - uuid: ca205c292e8c45628da95c93a9280f95
+                  expression: 'nodata(/DPI Mesh Aggregator/dpi.peers_ok[{#TARGET},{#KIND},{#PORT}],{$DPI.NODATA_WINDOW},"strict")=1'
+                  name: 'DPI Mesh stale: {#TARGET} {#KIND}:{#PORT}'
+                  priority: INFO
+                  description: |
+                    The aggregator's dpi.peers_ok calc item has not updated in the last {$DPI.NODATA_WINDOW}. Possible causes:
+                    
+                    - Aggregator host stopped processing calc items (Zabbix server overload, queue backlog)
+                    - ALL vantages stopped producing dpi.verdict[{#TARGET},{#KIND},{#PORT}] (mesh-wide outage of probing infrastructure)
+                    - Target was removed from DPI Targets hostgroup but LLD still discovers the tuple
+                    
+                    SUPPRESSES the 4 directional-block tiers via dependency: a frozen aggregator must not produce false consensus alerts.
+                  manual_close: 'YES'
+            - uuid: 49668ae20af840989af1aaa99c9fd2fd
+              name: 'DPI vantages reporting [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: CALCULATED
+              key: 'dpi.vantages_total[{#TARGET},{#KIND},{#PORT}]'
+              delay: '{$DPI.INTERVAL}'
+              history: 30d
+              params: 'count(last_foreach(/*/dpi.verdict[{#TARGET},{#KIND},{#PORT}]),"regexp",".")'
+              description: 'Total vantages currently producing a dpi.verdict for this tuple, regardless of value. Used as the denominator of the severity ladder so that adding/removing vantages adjusts the tiers automatically. Also adapts to per-vantage EXCLUDE_KINDS asymmetry (a target probed by only N of M vantages naturally has vantages_total = N).'
+          trigger_prototypes:
+            - uuid: 30b492e530a347d594eb711afbf7c806
+              expression: 'count(/DPI Mesh Aggregator/dpi.affected[{#TARGET},{#KIND},{#PORT}],#3,"eq","1")=3 and last(/DPI Mesh Aggregator/dpi.vantages_total[{#TARGET},{#KIND},{#PORT}])>=2 and last(/DPI Mesh Aggregator/dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}])>=1'
+              name: 'DPI Mesh consensus (1 vantage affected): {#TARGET} {#KIND}:{#PORT}'
+              priority: INFO
+              opdata: 'aff=1/{ITEM.LASTVALUE2} dpi={?last(/DPI Mesh Aggregator/dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}])}'
+              description: |
+                Exactly one vantage has reported non-OK on {#TARGET} {#KIND}:{#PORT} for 3 consecutive aggregator cycles (~15 min at default INTERVAL=5m). Smallest-scope directional block: single ISP issue, single-region restriction, or NAT-hairpinning that escaped SELF_TARGETS.
+
+                Gate vantages_total >= 2 prevents collision with HIGH (all-affected) when the mesh has only one vantage (then affected=1 is also peers_ok=0).
+
+                Per-vantage verdicts: check Latest data on host group "DPI Vantages" with key filter dpi.verdict.
+
+                Severity: INFO.
+              manual_close: 'YES'
+              dependencies:
+                - name: 'DPI Mesh stale: {#TARGET} {#KIND}:{#PORT}'
+                  expression: 'nodata(/DPI Mesh Aggregator/dpi.peers_ok[{#TARGET},{#KIND},{#PORT}],{$DPI.NODATA_WINDOW},"strict")=1'
+            - uuid: ae9b797b1f13476580a3ea75649f9848
+              expression: 'count(/DPI Mesh Aggregator/dpi.affected[{#TARGET},{#KIND},{#PORT}],#3,"eq","2")=3 and last(/DPI Mesh Aggregator/dpi.vantages_total[{#TARGET},{#KIND},{#PORT}])>=3 and last(/DPI Mesh Aggregator/dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}])>=1'
+              name: 'DPI Mesh consensus (2 vantages affected): {#TARGET} {#KIND}:{#PORT}'
+              priority: WARNING
+              opdata: 'aff={ITEM.LASTVALUE1}/{ITEM.LASTVALUE2} dpi={?last(/DPI Mesh Aggregator/dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}])}'
+              description: |
+                Two vantages have reported non-OK on {#TARGET} {#KIND}:{#PORT} for 3 consecutive aggregator cycles. Regional-block scope: multiple ISPs/regions affected but majority of users still reach the service.
+
+                Gate vantages_total >= 3 keeps this distinct from INFO (1-affected) when N=2.
+
+                Per-vantage verdicts: check Latest data on host group "DPI Vantages" with key filter dpi.verdict.
+
+                Severity: WARNING.
+              manual_close: 'YES'
+              dependencies:
+                - name: 'DPI Mesh stale: {#TARGET} {#KIND}:{#PORT}'
+                  expression: 'nodata(/DPI Mesh Aggregator/dpi.peers_ok[{#TARGET},{#KIND},{#PORT}],{$DPI.NODATA_WINDOW},"strict")=1'
+            - uuid: 37448f3ed70e4fa8887498fcdd068e36
+              expression: 'count(/DPI Mesh Aggregator/dpi.affected[{#TARGET},{#KIND},{#PORT}],#3,"ge","3")=3 and count(/DPI Mesh Aggregator/dpi.peers_ok[{#TARGET},{#KIND},{#PORT}],#3,"ge","1")=3 and last(/DPI Mesh Aggregator/dpi.vantages_total[{#TARGET},{#KIND},{#PORT}])>=4 and last(/DPI Mesh Aggregator/dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}])>=1'
+              name: 'DPI Mesh consensus (majority affected): {#TARGET} {#KIND}:{#PORT}'
+              priority: AVERAGE
+              opdata: 'aff={ITEM.LASTVALUE1}/{ITEM.LASTVALUE3} ok={ITEM.LASTVALUE2} dpi={?last(/DPI Mesh Aggregator/dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}])}'
+              description: |
+                At least 3 vantages but not all have reported non-OK on {#TARGET} {#KIND}:{#PORT} for 3 consecutive aggregator cycles. Majority of users likely affected; service nearly unreachable across regions.
+
+                Gate vantages_total >= 4 ensures the (majority but not all) range is non-empty. The peers_ok >= 1 check keeps this distinct from HIGH (all-affected, fires when peers_ok = 0).
+
+                Per-vantage verdicts: check Latest data on host group "DPI Vantages" with key filter dpi.verdict.
+
+                Severity: AVERAGE.
+              manual_close: 'YES'
+              dependencies:
+                - name: 'DPI Mesh stale: {#TARGET} {#KIND}:{#PORT}'
+                  expression: 'nodata(/DPI Mesh Aggregator/dpi.peers_ok[{#TARGET},{#KIND},{#PORT}],{$DPI.NODATA_WINDOW},"strict")=1'
+          url: '{$DPI.API_URL}'
+          posts: |
+            {
+              "jsonrpc": "2.0",
+              "method": "host.get",
+              "params": {
+                "output": ["host"],
+                "selectMacros": ["macro", "value"]
+              },
+              "id": 1,
+              "auth": "{$DPI.API_TOKEN}"
+            }
+          headers:
+            - name: Content-Type
+              value: application/json
+          request_method: POST
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  // Convert Zabbix host.get result into {data: [...]} LLD rows,
+                  // expanding the comma-separated {$DPI.KINDS} per host.
+                  var resp = JSON.parse(value);
+                  if (!resp.result) {
+                    throw "API error: " + JSON.stringify(resp.error || resp);
+                  }
+                  var rows = [];
+                  for (var i = 0; i < resp.result.length; i++) {
+                    var h = resp.result[i];
+                    var macros = {};
+                    for (var j = 0; j < (h.macros || []).length; j++) {
+                      macros[h.macros[j].macro] = h.macros[j].value;
+                    }
+                    var dns = macros["{$DPI.DNS}"] || h.host;
+                    var region = macros["{$DPI.REGION}"] || "";
+                    var sni = macros["{$DPI.SNI}"] || dns;
+                    var kinds = macros["{$DPI.KINDS}"] || "";
+                    var parts = kinds.split(",");
+                    for (var k = 0; k < parts.length; k++) {
+                      var kp = parts[k].trim();
+                      if (!kp) continue;
+                      var colon = kp.indexOf(":");
+                      if (colon < 0) continue;
+                      var kind = kp.substring(0, colon).trim();
+                      var port = kp.substring(colon + 1).trim();
+                      if (!kind || !port) continue;
+                      rows.push({
+                        "{#TARGET}": h.host,
+                        "{#DNS}": dns,
+                        "{#REGION}": region,
+                        "{#KIND}": kind,
+                        "{#PORT}": port,
+                        "{#SNI}": sni
+                      });
+                    }
+                  }
+                  return JSON.stringify({"data": rows});
+      macros:
+        - macro: '{$DPI.API_TOKEN}'
+          type: SECRET_TEXT
+          description: 'Scoped API token (user dpi-vantage) used by the LLD HTTP-agent call. Set per-host. Type=Secret.'
+        - macro: '{$DPI.API_URL}'
+          value: 'https://your-zabbix.example.com/api_jsonrpc.php'
+          description: 'Zabbix frontend API endpoint for the LLD discovery. Same as the vantage template; aggregator hits the same endpoint to discover the same (target, kind, port) tuples.'
+        - macro: '{$DPI.EXCLUDE_KINDS}'
+          value: ^$
+          description: 'Regex of kinds to skip on this aggregator. Default ^$ matches nothing -> aggregator discovers ALL kinds. Normally leave empty; per-vantage EXCLUDE_KINDS already filters at the verdict-collection layer.'
+        - macro: '{$DPI.INTERVAL}'
+          value: 5m
+          description: 'How often the calculated items (peers_ok, vantages_total, affected) refresh. Should be >= vantage probe interval, otherwise some calc cycles miss fresh data.'
+        - macro: '{$DPI.NODATA_WINDOW}'
+          value: 1h
+          description: 'Window for the stale-data trigger (nodata on dpi.peers_ok). If the aggregator goes silent for longer than this on a tuple, the stale trigger fires and suppresses the 4 directional-block tiers via dependency.'
+        - macro: '{$DPI.SELF_TARGETS}'
+          value: ^$
+          description: 'Regex of target hostnames to skip on this aggregator. Default ^$ matches nothing. Used only if the aggregator runs on a host that''s also a DPI Target -- avoid self-loops.'
+
