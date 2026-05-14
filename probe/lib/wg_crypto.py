@@ -23,6 +23,10 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 NOISE_CONSTRUCTION = b"Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s"
 WG_IDENTIFIER = b"WireGuard v1 zx2c4 Jason@zx2c4.com"
 LABEL_MAC1 = b"mac1----"
+# Reserved for future cookie-reply handling (WG whitepaper §5.4.7); not yet
+# implemented. If a loaded server sends a type=0x03 cookie reply, the current
+# probe will timeout and report WG_HANDSHAKE_BLOCKED instead of retrying with
+# the cookie-mac. Documented as a known limitation.
 LABEL_COOKIE = b"cookie--"
 
 _KEY_LEN = 32

@@ -165,7 +165,7 @@ def test_new_verdict_codes_have_default_confidence() -> None:
         VerdictCode.TSPU_BYPASS_OK: Confidence.HIGH,
         VerdictCode.THROTTLE_DETECTED: Confidence.HIGH,
         VerdictCode.WG_HANDSHAKE_PASS: Confidence.HIGH,
-        VerdictCode.WG_HANDSHAKE_BLOCKED: Confidence.HIGH,
+        VerdictCode.WG_HANDSHAKE_BLOCKED: Confidence.MEDIUM,
     }
     for code, conf in expected.items():
         v = Verdict(code=code, reason="x", latency_ms=1.0)

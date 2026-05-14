@@ -56,6 +56,25 @@ def probe(
     chunk_size: int = 1024,
     interleave_read_timeout: float = 0.05,
 ) -> Verdict:
+    """Probe TLS endpoint for TSPU bytes-counter throttle signature.
+
+    Args:
+        dns / port / sni / timeout: standard probe inputs.
+        push_bytes: total HTTP body size to attempt (default 64 KB; matches
+            hyperion-cs/dpi-checkers DPI_THR_BYTES = 64*1024 and Runnin4ik
+            tcp16_scanner total 16 * 4000 = 64 KB).
+        expect_rst_window: (lo, hi) byte range where a RST counts as
+            THROTTLE_DETECTED. Default (14_000, 34_000) is a CONSERVATIVE
+            HEURISTIC wider than the nominal "16-20 KB" range reported by
+            source repos — the extra margin reduces false negatives caused
+            by header-accounting differences (TLS overhead, HTTP headers)
+            and operator-implementation drift. Tighten to (16_000, 22_000)
+            for strict source parity; widen for permissive matching.
+        chunk_size: bytes per sendall(); 1 KB gives finer byte-position
+            resolution than Runnin4ik's 4 KB; executor may switch to 4096
+            for source parity.
+        interleave_read_timeout: short-timeout recv between writes (0.05 s).
+    """
     t0 = time.monotonic()
     res = resolve_with_doh_check(dns, timeout=timeout)
     if res.ip is None:

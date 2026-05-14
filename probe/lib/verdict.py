@@ -75,7 +75,7 @@ _DEFAULT_CONFIDENCE: dict[VerdictCode, Confidence] = {
     VerdictCode.TSPU_BYPASS_OK: Confidence.HIGH,
     VerdictCode.THROTTLE_DETECTED: Confidence.HIGH,
     VerdictCode.WG_HANDSHAKE_PASS: Confidence.HIGH,
-    VerdictCode.WG_HANDSHAKE_BLOCKED: Confidence.HIGH,
+    VerdictCode.WG_HANDSHAKE_BLOCKED: Confidence.MEDIUM,
     VerdictCode.TCP_RST_HANDSHAKE: Confidence.MEDIUM,
     VerdictCode.TLS_TIMEOUT: Confidence.MEDIUM,
     VerdictCode.BANNER_MISMATCH: Confidence.MEDIUM,
