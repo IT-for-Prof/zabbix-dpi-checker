@@ -975,7 +975,7 @@ cryptographically validated против WG whitepaper §5.4 byte-for-byte
    ifp-vps15 (один RU оператор) и проходит на sr-vps01 (другой RU оператор).
    Mesh-quorum-триггеры справляются с этим автоматически.
 4. **Своя инфраструктура на Hetzner не блокируется**: 3 MB sustained
-   outbound прошли чисто из ifp-vps15 → 65.21.40.204:5561. TSPU is
+   outbound прошли чисто из ifp-vps15 → 203.0.113.20:5561. TSPU is
    destination-list-driven; non-VPN-provider ASN + non-default port + не
    на registry = passes.
 

@@ -554,15 +554,15 @@ def test_cli_wg_handshake_kind_reads_env_keypair(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("DPI_WG_CLIENT_PUB",  "Q0xJRU5UUFVCS0VZQUFBQUFBQUFBQUFBQUFBQUFBQUE=")
     monkeypatch.setattr(
         "sys.argv",
-        ["dpi_probe", "65.21.40.204", "wg-handshake", "51820",
-         "65.21.40.204", "", "10"],
+        ["dpi_probe", "203.0.113.20", "wg-handshake", "51820",
+         "203.0.113.20", "", "10"],
     )
     with pytest.raises(SystemExit) as exc:
         dpi_probe.main()
     assert exc.value.code == 0
     assert calls
     call = calls[0]
-    assert call["dns"] == "65.21.40.204"
+    assert call["dns"] == "203.0.113.20"
     assert call["port"] == 51820
     assert call["server_pub_b64"] == "U0VSVkVSUFVCS0VZQUFBQUFBQUFBQUFBQUFBQUFBQUE="
 
@@ -577,8 +577,8 @@ def test_cli_wg_handshake_missing_env_emits_internal_error(
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(
         "sys.argv",
-        ["dpi_probe", "65.21.40.204", "wg-handshake", "51820",
-         "65.21.40.204", "", "10"],
+        ["dpi_probe", "203.0.113.20", "wg-handshake", "51820",
+         "203.0.113.20", "", "10"],
     )
     with pytest.raises(SystemExit) as exc:
         dpi_probe.main()

@@ -160,7 +160,7 @@ CI runs the same on every push (see `.github/workflows/ci.yml`).
 
 After the 2026-05-14 real-environment test session (probes deployed to
 all 5 vantages, cross-vantage matrix against rutracker / linkedin /
-mullvad.net / 65.21.40.204), 8 blocking classes are NOT yet caught by
+mullvad.net / 203.0.113.20), 8 blocking classes are NOT yet caught by
 the current probe stack, ordered by priority:
 
 | Gap | Why current probes miss it | Closing design |

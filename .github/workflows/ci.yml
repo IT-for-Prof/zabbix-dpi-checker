@@ -21,7 +21,7 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: Install dev tools
-        run: pip install pytest ruff mypy pyyaml
+        run: pip install pytest ruff mypy pyyaml cryptography
 
       - name: Ruff lint
         run: ruff check probe template
