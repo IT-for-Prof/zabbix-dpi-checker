@@ -611,3 +611,29 @@ def test_cli_quic_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
     assert exc.value.code == 0
     assert calls
     assert calls[0]["sni"] == "cloudflare-quic.com"
+
+
+def test_cli_wireguard_passes_pubkey_via_cert_fp_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from probe import dpi_probe
+    from probe.lib import probe_wireguard
+    from probe.lib.verdict import Verdict, VerdictCode
+
+    calls: list[dict[str, object]] = []
+
+    def fake_probe(**kwargs: object) -> Verdict:
+        calls.append(kwargs)
+        return Verdict(VerdictCode.OK, "stub", 1.0)
+
+    monkeypatch.setattr(probe_wireguard, "probe", fake_probe)
+    pubkey = "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQT0="
+    monkeypatch.setattr(
+        "sys.argv",
+        ["dpi_probe", "vpn.example.com", "wireguard", "51820", "1.2.3.4", "", "10", pubkey],
+    )
+    with pytest.raises(SystemExit) as exc:
+        dpi_probe.main()
+    assert exc.value.code == 0
+    assert calls
+    assert calls[0].get("pubkey_b64") == pubkey

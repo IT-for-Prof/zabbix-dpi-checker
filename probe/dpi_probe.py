@@ -255,6 +255,7 @@ def main() -> NoReturn:
                 dns=args.dns,
                 port=args.port,
                 timeout=args.timeout,
+                pubkey_b64=args.cert_fp or None,
             )
         elif args.kind == "openvpn":
             v = probe_openvpn.probe(
