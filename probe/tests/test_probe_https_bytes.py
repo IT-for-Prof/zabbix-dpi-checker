@@ -121,3 +121,66 @@ def test_bytes_counter_rst_outside_window_returns_generic_rst(tls_server) -> Non
     sock.close()
     t.join(timeout=3.0)
     assert v.code == VerdictCode.TCP_RST_MID_STREAM, f"got {v.code}: {v.reason}"
+
+
+def test_bytes_counter_clean_tls_close_is_not_throttle(tls_server) -> None:
+    """Server cleanly closes TLS (close-notify) mid-stream → ssl.SSLZeroReturnError
+    on the client → must classify as OK (no RST), NOT THROTTLE_DETECTED.
+    Guards the _is_rst_error logic that says SSLZeroReturnError is a clean close.
+    """
+    ctx, sock, port = tls_server
+
+    def _tls_clean_close_mid_stream(sock, ctx, close_after_bytes):
+        """Echo until close_after_bytes received, then do a graceful TLS close-notify."""
+        import ssl as _ssl
+        try:
+            raw, _ = sock.accept()
+        except OSError:
+            return
+        # NOTE: no SO_LINGER here — we want a clean close, not a RST
+        try:
+            tls = ctx.wrap_socket(raw, server_side=True)
+        except (_ssl.SSLError, OSError):
+            raw.close()
+            return
+        received = 0
+        try:
+            while True:
+                try:
+                    chunk = tls.recv(4096)
+                except (_ssl.SSLError, OSError):
+                    break
+                if not chunk:
+                    break
+                received += len(chunk)
+                # Echo chunk back
+                try:
+                    tls.sendall(chunk)
+                except (_ssl.SSLError, OSError):
+                    break
+                if received >= close_after_bytes:
+                    # We've echoed enough; gracefully close
+                    break
+        finally:
+            # Clean close with close-notify
+            with contextlib.suppress(_ssl.SSLError, OSError):
+                tls.unwrap()
+            with contextlib.suppress(OSError):
+                tls.close()
+
+    t = threading.Thread(
+        target=_tls_clean_close_mid_stream, args=(sock, ctx, 18000), daemon=True,
+    )
+    t.start()
+    v = probe_https_bytes.probe(
+        dns="127.0.0.1", port=port, sni="localhost", timeout=5.0,
+        push_bytes=65536, expect_rst_window=(14000, 34000),
+        chunk_size=1024,
+    )
+    sock.close()
+    t.join(timeout=3.0)
+    # Clean close mid-stream must NOT be classified as THROTTLE_DETECTED.
+    # OK or REMOTE_HUNGUP_AFTER_CONNECT are both acceptable (not a RST).
+    assert v.code != VerdictCode.THROTTLE_DETECTED, (
+        f"clean TLS close misclassified as throttle: {v.code}: {v.reason}"
+    )

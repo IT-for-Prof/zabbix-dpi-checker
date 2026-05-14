@@ -134,6 +134,9 @@ def probe(
         try:
             tls.sendall(header)
             cumulative += len(header)
+        except ssl.SSLZeroReturnError:
+            # Clean TLS close from peer — not a RST
+            pass
         except (ConnectionResetError, BrokenPipeError, ssl.SSLError, OSError) as e:
             if _is_rst_error(e):
                 rst_at = cumulative
@@ -146,6 +149,9 @@ def probe(
             try:
                 tls.sendall(b"X" * n)
                 cumulative += n
+            except ssl.SSLZeroReturnError:
+                # Clean TLS close from peer — not a RST
+                break
             except (ConnectionResetError, BrokenPipeError, ssl.SSLError, OSError) as e:
                 if _is_rst_error(e):
                     rst_at = cumulative
@@ -158,12 +164,12 @@ def probe(
                 tls.settimeout(interleave_read_timeout)
                 data = tls.recv(8192)
                 if not data:
-                    # Peer closed; ambiguous — could be FIN (clean) or RST
-                    # already-buffered. Treat as RST at current position to
-                    # err on the side of detection.
-                    rst_at = cumulative
-                    extra_reason = "peer closed during interleave read"
-                    break
+                    # Peer sent EOF (either graceful close-notify or TCP RST/hard close).
+                    # On a clean TLS close (close-notify), the next recv() will raise
+                    # SSLZeroReturnError. On a hard close (SO_LINGER 0), we expect an
+                    # RST-like exception. Timeout means we can't tell, so assume clean.
+                    # Do NOT set rst_at here; let the exception handler below decide.
+                    pass
             except (TimeoutError, ssl.SSLWantReadError, BlockingIOError):
                 pass  # Normal: no echo yet, keep pushing
             except ssl.SSLZeroReturnError:
