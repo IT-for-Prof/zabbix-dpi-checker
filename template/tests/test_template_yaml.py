@@ -113,8 +113,13 @@ def test_lld_uses_wireguard_pubkey_macro_for_wireguard_rows(doc: dict[str, Any])
 
 
 def test_template_has_tspu_active_trigger(doc: dict[str, Any]) -> None:
-    triggers = doc["zabbix_export"]["templates"][0].get("triggers", [])
-    names = {trigger["name"] for trigger in triggers}
+    """Zabbix 7.0 only accepts simple-host triggers at top-level
+    `zabbix_export.triggers[]`, NOT nested inside `templates[].triggers`.
+    Check both possible locations for backward compatibility with older YAML
+    layouts."""
+    template_triggers = doc["zabbix_export"]["templates"][0].get("triggers", []) or []
+    toplevel_triggers = doc["zabbix_export"].get("triggers", []) or []
+    names = {t["name"] for t in template_triggers + toplevel_triggers}
     assert any("TSPU active" in name for name in names), f"have: {names}"
 
 

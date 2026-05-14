@@ -113,10 +113,12 @@ def test_lld_uses_same_endpoint_as_vantage(doc: dict) -> None:  # type: ignore[t
 
 
 def test_three_calc_item_prototypes_present(doc: dict) -> None:  # type: ignore[type-arg]
-    """The aggregator must materialize exactly the three calc items the
-    severity ladder reads. Listing them here also guards against accidental
-    leftovers (e.g., probe-side keys leaking into the aggregator template
-    via copy-paste)."""
+    """The aggregator must materialize at minimum the three calc items the
+    severity ladder reads. The `discriminator_any` item (added 2026-05-14
+    to gate severity triggers on a source-of-truth verdict from any vantage)
+    is also required for live-Zabbix-7.0 import compatibility but isn't
+    part of the original three. Listing the required-three here guards
+    against drops; extras like discriminator_any are allowed."""
     keys = {ip["key"]: ip for ip in (_lld(doc).get("item_prototypes") or [])}
     required = {
         "dpi.peers_ok[{#TARGET},{#KIND},{#PORT}]": ('"eq"', '"OK"'),  # counts OK verdicts only
@@ -126,9 +128,8 @@ def test_three_calc_item_prototypes_present(doc: dict) -> None:  # type: ignore[
         ),  # counts ANY non-empty verdict
         "dpi.affected[{#TARGET},{#KIND},{#PORT}]": ('"ne"', '"OK"'),  # counts non-OK verdicts only
     }
-    assert set(keys) == set(required), (
-        f"aggregator must have exactly these item prototypes; got {sorted(keys)}"
-    )
+    missing = set(required) - set(keys)
+    assert not missing, f"aggregator missing required item prototypes: {missing}"
     for key, (op, val) in required.items():
         item = keys[key]
         assert item.get("type") == "CALCULATED", (
