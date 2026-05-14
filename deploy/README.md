@@ -84,8 +84,12 @@ The probe binary alone does nothing — Zabbix has to invoke it. On each vantage
    proxy group with HA failover, which would let the External check execute
    from a different region on any given day.
 
-LLD picks up targets automatically and creates one item-set + one
-`dpi.peers_ok` calculated item per `(target, kind, port)` per vantage.
+LLD picks up targets automatically and creates one item-set
+(`dpi.verdict`, `dpi.reason`, `dpi.latency_ms`, `dpi.discriminator`, ...) per
+`(target, kind, port)` per vantage. The consensus layer (`dpi.peers_ok`,
+`dpi.affected`, `dpi.vantages_total`, `dpi.discriminator_any` + 4-tier
+severity triggers) lives on a separate phantom host that hosts the
+`DPI Mesh Aggregator` template — see the main README.
 
 ## Opt-in syslog logging
 

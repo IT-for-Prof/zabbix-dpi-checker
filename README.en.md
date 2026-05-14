@@ -51,11 +51,11 @@ the client public key as a `[Peer]` block on the WireGuard server side.
 - `probe/` — stdlib-only Python 3.11+ probe library and CLI.
 - `template/dpi-mesh-blocking-detection.yaml` — vantage template: LLD + verdict
   items + per-vantage Info-level stale-data trigger. No severity triggers.
-- `template/dpi-mesh-aggregator.yaml` — aggregator template: 5 calc items
-  (`dpi.peers_ok`, `dpi.vantages_total`, `dpi.affected`, `dpi.unavailable`,
+- `template/dpi-mesh-aggregator.yaml` — aggregator template: 4 calc items
+  (`dpi.peers_ok`, `dpi.vantages_total`, `dpi.affected`,
   `dpi.discriminator_any`) per (target, kind, port), plus 4 severity-tier
-  triggers (gated on `discriminator_any ≥ 1`) and 1 Info-sentinel stale
-  trigger.
+  triggers (gated on `last(dpi.discriminator_any) ≥ 1`) and 1 Info-sentinel
+  stale trigger.
 - `deploy/` — installer (`install-prober.sh`) and remote-deploy helper
   (`deploy-to.sh`).
 
@@ -81,10 +81,17 @@ under the same scoped read-only `dpi-vantage` user (allow-list: `host.get`,
 ### Severity ladder (auto-scales with mesh size)
 
 Four calc items on the aggregator drive the ladder:
-- `dpi.peers_ok` — vantages with verdict `OK`
-- `dpi.affected` — vantages with non-OK verdict (excludes `VANTAGE_UNAVAILABLE`)
+- `dpi.peers_ok` — vantages reporting verdict `OK`
+- `dpi.affected` — vantages reporting any non-OK verdict
 - `dpi.vantages_total` — total vantages currently reporting
-- `dpi.discriminator_any` — count of vantages whose probe extracted a HIGH-confidence DPI fingerprint (TSPU RST source mismatch, TLS-post-Hello reset, RKN HTTP stub, DNS lie, etc.)
+- `dpi.discriminator_any` — vantages whose verdict is one of the
+  HIGH-confidence DPI fingerprints: `DNS_LIE`, `TCP_RST_MID_STREAM`,
+  `TLS_RESET_POST_HELLO`, `CERT_MISMATCH`, `HTTP_STUB`
+
+`VANTAGE_UNAVAILABLE` (control-endpoint failure) is LOW confidence and
+therefore not in `dpi.discriminator_any` — a single broken vantage can
+appear in `dpi.affected` but the discriminator gate keeps it out of the
+alert path.
 
 Every consensus tier carries a final `last(dpi.discriminator_any) >= 1` gate,
 so a tier fires only when at least one vantage saw an attributable DPI
