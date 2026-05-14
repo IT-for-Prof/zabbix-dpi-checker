@@ -12,22 +12,22 @@ class VerdictCode(StrEnum):
     """Classification of probe outcome. Stable identifiers — referenced by Zabbix value maps."""
 
     OK = "OK"
-    TCP_RST_HANDSHAKE = "TCP_RST_HANDSHAKE"      # RST during 3-way handshake — port/IP block
-    TCP_RST_MID_STREAM = "TCP_RST_MID_STREAM"    # RST after some bytes — DPI mid-stream
+    TCP_RST_HANDSHAKE = "TCP_RST_HANDSHAKE"  # RST during 3-way handshake — port/IP block
+    TCP_RST_MID_STREAM = "TCP_RST_MID_STREAM"  # RST after some bytes — DPI mid-stream
     TLS_RESET_POST_HELLO = "TLS_RESET_POST_HELLO"  # RST after ClientHello — SNI-based DPI
-    TLS_TIMEOUT = "TLS_TIMEOUT"                  # mid-TLS hang — scrubber stalled
-    CERT_MISMATCH = "CERT_MISMATCH"              # unexpected cert fingerprint — MITM suspicion
-    BANNER_MISMATCH = "BANNER_MISMATCH"          # SMTP/SSH banner doesn't match expected pattern
+    TLS_TIMEOUT = "TLS_TIMEOUT"  # mid-TLS hang — scrubber stalled
+    CERT_MISMATCH = "CERT_MISMATCH"  # unexpected cert fingerprint — MITM suspicion
+    BANNER_MISMATCH = "BANNER_MISMATCH"  # SMTP/SSH banner doesn't match expected pattern
     # Peer accepted TCP then closed cleanly without protocol response.
     REMOTE_HUNGUP_AFTER_CONNECT = "REMOTE_HUNGUP_AFTER_CONNECT"
     VANTAGE_UNAVAILABLE = "VANTAGE_UNAVAILABLE"  # control probe failed; measurement absent
-    DNS_LIE = "DNS_LIE"                          # system DNS disagrees with DoH for the target
-    HTTP_STUB = "HTTP_STUB"                      # RKN-style stub page served instead of real
-    ROUTE_BLACKHOLE = "ROUTE_BLACKHOLE"          # ICMP admin-prohibited or no route
-    PORT_FILTERED = "PORT_FILTERED"              # connect timeout on TCP, no RST — silent drop
-    REMOTE_DOWN = "REMOTE_DOWN"                  # connection refused — service down on host
-    UDP_BLIND = "UDP_BLIND"                      # UDP probe couldn't classify (no key etc.)
-    ERROR_INTERNAL = "ERROR_INTERNAL"            # probe itself failed — bug or env issue
+    DNS_LIE = "DNS_LIE"  # system DNS disagrees with DoH for the target
+    HTTP_STUB = "HTTP_STUB"  # RKN-style stub page served instead of real
+    ROUTE_BLACKHOLE = "ROUTE_BLACKHOLE"  # ICMP admin-prohibited or no route
+    PORT_FILTERED = "PORT_FILTERED"  # connect timeout on TCP, no RST — silent drop
+    REMOTE_DOWN = "REMOTE_DOWN"  # connection refused — service down on host
+    UDP_BLIND = "UDP_BLIND"  # UDP probe couldn't classify (no key etc.)
+    ERROR_INTERNAL = "ERROR_INTERNAL"  # probe itself failed — bug or env issue
 
 
 class Confidence(StrEnum):
@@ -58,22 +58,22 @@ class Discriminator(StrEnum):
 # but may override at construction time when context warrants it (e.g. a
 # TCP_RST_HANDSHAKE from a target known to RST on policy is HIGH, not MEDIUM).
 _DEFAULT_CONFIDENCE: dict[VerdictCode, Confidence] = {
-    VerdictCode.OK:                    Confidence.HIGH,
-    VerdictCode.DNS_LIE:               Confidence.HIGH,
-    VerdictCode.TCP_RST_MID_STREAM:    Confidence.HIGH,
-    VerdictCode.TLS_RESET_POST_HELLO:  Confidence.HIGH,
-    VerdictCode.CERT_MISMATCH:         Confidence.HIGH,
-    VerdictCode.HTTP_STUB:             Confidence.HIGH,
-    VerdictCode.TCP_RST_HANDSHAKE:     Confidence.MEDIUM,
-    VerdictCode.TLS_TIMEOUT:           Confidence.MEDIUM,
-    VerdictCode.BANNER_MISMATCH:       Confidence.MEDIUM,
-    VerdictCode.ROUTE_BLACKHOLE:       Confidence.MEDIUM,
+    VerdictCode.OK: Confidence.HIGH,
+    VerdictCode.DNS_LIE: Confidence.HIGH,
+    VerdictCode.TCP_RST_MID_STREAM: Confidence.HIGH,
+    VerdictCode.TLS_RESET_POST_HELLO: Confidence.HIGH,
+    VerdictCode.CERT_MISMATCH: Confidence.HIGH,
+    VerdictCode.HTTP_STUB: Confidence.HIGH,
+    VerdictCode.TCP_RST_HANDSHAKE: Confidence.MEDIUM,
+    VerdictCode.TLS_TIMEOUT: Confidence.MEDIUM,
+    VerdictCode.BANNER_MISMATCH: Confidence.MEDIUM,
+    VerdictCode.ROUTE_BLACKHOLE: Confidence.MEDIUM,
     VerdictCode.REMOTE_HUNGUP_AFTER_CONNECT: Confidence.LOW,
     VerdictCode.VANTAGE_UNAVAILABLE: Confidence.LOW,
-    VerdictCode.PORT_FILTERED:         Confidence.LOW,
-    VerdictCode.REMOTE_DOWN:           Confidence.LOW,
-    VerdictCode.UDP_BLIND:             Confidence.LOW,
-    VerdictCode.ERROR_INTERNAL:        Confidence.LOW,
+    VerdictCode.PORT_FILTERED: Confidence.LOW,
+    VerdictCode.REMOTE_DOWN: Confidence.LOW,
+    VerdictCode.UDP_BLIND: Confidence.LOW,
+    VerdictCode.ERROR_INTERNAL: Confidence.LOW,
 }
 
 

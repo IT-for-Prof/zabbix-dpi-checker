@@ -72,11 +72,25 @@ def test_cli_sni_defaults_to_dns_when_omitted() -> None:
 
 
 def _spin_local_tls_server(tmpdir: str) -> tuple[socket.socket, int]:
-    subprocess.check_call([
-        "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-        "-keyout", f"{tmpdir}/key.pem", "-out", f"{tmpdir}/cert.pem",
-        "-days", "1", "-subj", "/CN=localhost",
-    ], stderr=subprocess.DEVNULL)
+    subprocess.check_call(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            f"{tmpdir}/key.pem",
+            "-out",
+            f"{tmpdir}/cert.pem",
+            "-days",
+            "1",
+            "-subj",
+            "/CN=localhost",
+        ],
+        stderr=subprocess.DEVNULL,
+    )
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ctx.load_cert_chain(f"{tmpdir}/cert.pem", f"{tmpdir}/key.pem")
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -115,29 +129,43 @@ def test_cli_control_only_mode_emits_ok_verdict(
 
 
 def test_cli_with_control_returns_vantage_unavailable_when_control_fails(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from probe.dpi_probe import main
     from probe.lib import probe_control as pc_mod
     from probe.lib.verdict import Verdict, VerdictCode
 
-    monkeypatch.setattr(pc_mod, "probe_control", lambda **kw: Verdict(
-        code=VerdictCode.PORT_FILTERED,
-        reason="control simulated fail",
-        latency_ms=999.0,
-    ))
+    monkeypatch.setattr(
+        pc_mod,
+        "probe_control",
+        lambda **kw: Verdict(
+            code=VerdictCode.PORT_FILTERED,
+            reason="control simulated fail",
+            latency_ms=999.0,
+        ),
+    )
     from probe.lib import probe_https
+
     monkeypatch.setattr(
         probe_https,
         "probe",
         lambda **kw: pytest.fail("target probe must not run when control fails"),
     )
 
-    monkeypatch.setattr("sys.argv", [
-        "dpi_probe",
-        "example.com", "https", "443", "example.com", "example.com", "5",
-        "--with-control",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "example.com",
+            "https",
+            "443",
+            "example.com",
+            "example.com",
+            "5",
+            "--with-control",
+        ],
+    )
     with pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code == 0
@@ -148,27 +176,46 @@ def test_cli_with_control_returns_vantage_unavailable_when_control_fails(
 
 
 def test_cli_with_control_proceeds_when_control_passes(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from probe.dpi_probe import main
     from probe.lib import probe_control as pc_mod
     from probe.lib import probe_https
     from probe.lib.verdict import Verdict, VerdictCode
 
-    monkeypatch.setattr(pc_mod, "probe_control", lambda **kw: Verdict(
-        code=VerdictCode.OK, reason="control ok", latency_ms=42.0,
-    ))
-    monkeypatch.setattr(probe_https, "probe", lambda **kw: Verdict(
-        code=VerdictCode.TLS_TIMEOUT,
-        reason="simulated target timeout",
-        latency_ms=5000.0,
-        resolved_ip="93.184.216.34",
-    ))
-    monkeypatch.setattr("sys.argv", [
-        "dpi_probe",
-        "example.com", "https", "443", "example.com", "example.com", "5",
-        "--with-control",
-    ])
+    monkeypatch.setattr(
+        pc_mod,
+        "probe_control",
+        lambda **kw: Verdict(
+            code=VerdictCode.OK,
+            reason="control ok",
+            latency_ms=42.0,
+        ),
+    )
+    monkeypatch.setattr(
+        probe_https,
+        "probe",
+        lambda **kw: Verdict(
+            code=VerdictCode.TLS_TIMEOUT,
+            reason="simulated target timeout",
+            latency_ms=5000.0,
+            resolved_ip="93.184.216.34",
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "example.com",
+            "https",
+            "443",
+            "example.com",
+            "example.com",
+            "5",
+            "--with-control",
+        ],
+    )
     with pytest.raises(SystemExit):
         main()
     payload = json.loads(capsys.readouterr().out.strip())
@@ -176,7 +223,8 @@ def test_cli_with_control_proceeds_when_control_passes(
 
 
 def test_cli_control_only_bad_env_emits_error_internal(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from probe.dpi_probe import main
 
@@ -217,7 +265,8 @@ def test_cli_control_only_invalid_parsed_env_emits_error_internal(
 
 
 def test_cli_with_control_uses_same_env_config_as_control_only(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from probe.dpi_probe import main
     from probe.lib import probe_control as pc_mod
@@ -231,20 +280,32 @@ def test_cli_with_control_uses_same_env_config_as_control_only(
         return Verdict(code=VerdictCode.OK, reason="control ok", latency_ms=1.0)
 
     monkeypatch.setattr(pc_mod, "probe_control", fake_control)
-    monkeypatch.setattr(probe_https, "probe", lambda **kw: Verdict(
-        code=VerdictCode.OK,
-        reason="ok",
-        latency_ms=5.0,
-        resolved_ip="127.0.0.1",
-    ))
+    monkeypatch.setattr(
+        probe_https,
+        "probe",
+        lambda **kw: Verdict(
+            code=VerdictCode.OK,
+            reason="ok",
+            latency_ms=5.0,
+            resolved_ip="127.0.0.1",
+        ),
+    )
     monkeypatch.setenv("DPI_CONTROL_HOST", "203.0.113.10")
     monkeypatch.setenv("DPI_CONTROL_PORT", "9443")
     monkeypatch.setenv("DPI_CONTROL_TIMEOUT", "7")
-    monkeypatch.setattr("sys.argv", [
-        "dpi_probe",
-        "example.com", "https", "443", "example.com", "example.com", "5",
-        "--with-control",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "example.com",
+            "https",
+            "443",
+            "example.com",
+            "example.com",
+            "5",
+            "--with-control",
+        ],
+    )
     with pytest.raises(SystemExit):
         main()
     payload = json.loads(capsys.readouterr().out.strip())
@@ -266,11 +327,19 @@ def test_cli_forwards_cert_fp_to_probe_https(
         return Verdict(code=VerdictCode.OK, reason="x", latency_ms=1.0)
 
     monkeypatch.setattr(probe_https, "probe", fake_probe)
-    monkeypatch.setattr("sys.argv", [
-        "dpi_probe",
-        "example.com", "https", "443", "example.com", "example.com",
-        "5", "abc123deadbeef",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "example.com",
+            "https",
+            "443",
+            "example.com",
+            "example.com",
+            "5",
+            "abc123deadbeef",
+        ],
+    )
     with pytest.raises(SystemExit):
         main()
 
@@ -291,11 +360,19 @@ def test_cli_forwards_sni_and_cert_fp_to_probe_smtps(
         return Verdict(code=VerdictCode.OK, reason="x", latency_ms=1.0)
 
     monkeypatch.setattr(probe_smtp, "probe", fake_probe)
-    monkeypatch.setattr("sys.argv", [
-        "dpi_probe",
-        "example.com", "smtps", "465", "203.0.113.10", "mail.example.com",
-        "5", "abc123deadbeef",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "example.com",
+            "smtps",
+            "465",
+            "203.0.113.10",
+            "mail.example.com",
+            "5",
+            "abc123deadbeef",
+        ],
+    )
     with pytest.raises(SystemExit):
         main()
 
@@ -304,7 +381,8 @@ def test_cli_forwards_sni_and_cert_fp_to_probe_smtps(
 
 
 def test_cli_accepts_template_arg_order_with_cert_fp_and_control(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from probe.dpi_probe import main
     from probe.lib import probe_control as pc_mod
@@ -313,20 +391,35 @@ def test_cli_accepts_template_arg_order_with_cert_fp_and_control(
 
     captured_kwargs: dict[str, object] = {}
 
-    monkeypatch.setattr(pc_mod, "probe_control", lambda **kw: Verdict(
-        code=VerdictCode.OK, reason="control ok", latency_ms=1.0,
-    ))
+    monkeypatch.setattr(
+        pc_mod,
+        "probe_control",
+        lambda **kw: Verdict(
+            code=VerdictCode.OK,
+            reason="control ok",
+            latency_ms=1.0,
+        ),
+    )
 
     def fake_probe(**kw: object) -> Verdict:
         captured_kwargs.update(kw)
         return Verdict(code=VerdictCode.OK, reason="x", latency_ms=1.0)
 
     monkeypatch.setattr(probe_https, "probe", fake_probe)
-    monkeypatch.setattr("sys.argv", [
-        "dpi_probe",
-        "target", "https", "443", "example.com", "example.com", "5", "",
-        "--with-control",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "target",
+            "https",
+            "443",
+            "example.com",
+            "example.com",
+            "5",
+            "",
+            "--with-control",
+        ],
+    )
     with pytest.raises(SystemExit):
         main()
 

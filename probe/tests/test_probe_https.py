@@ -7,7 +7,11 @@ import ssl
 import struct
 import subprocess
 import threading
+from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
+
+import pytest
 
 from probe.lib import probe_https
 from probe.lib.resolver import DohCheckResult
@@ -45,9 +49,7 @@ def test_https_no_accept_means_port_filtered(tcp_responder: TcpResponder) -> Non
 
 
 def test_https_invalid_dns_raises_dns_error_verdict() -> None:
-    v = probe_https.probe(
-        dns="nonexistent.invalid", port=443, sni="example.com", timeout=2.0
-    )
+    v = probe_https.probe(dns="nonexistent.invalid", port=443, sni="example.com", timeout=2.0)
     assert v.code in {VerdictCode.DNS_LIE, VerdictCode.ERROR_INTERNAL}
     assert v.resolved_ip is None
 
@@ -75,8 +77,11 @@ def test_https_handshake_timeout_returns_tls_timeout_not_reset() -> None:
     port = server.getsockname()[1]
     try:
         verdict = probe_https.probe(
-            dns="127.0.0.1", port=port, sni="127.0.0.1",
-            timeout=0.5, read_body=False,
+            dns="127.0.0.1",
+            port=port,
+            sni="127.0.0.1",
+            timeout=0.5,
+            read_body=False,
         )
     finally:
         server.close()
@@ -154,7 +159,8 @@ def test_scan_for_stub_respects_custom_marker_list() -> None:
     """Pluggable markers allow non-RU jurisdictions to define their own patterns."""
     tls = _FakeTLS(b"HTTP/1.1 200 OK\r\n\r\nThis content is restricted by xx-authority.")
     result = probe_https._scan_for_stub(
-        tls, "example.com",
+        tls,
+        "example.com",
         deadline=10.0,
         markers=("restricted by xx-authority",),
     )
@@ -208,12 +214,25 @@ def test_http_stub_markers_cover_iran() -> None:
 
 
 def _spin_local_tls(tmp_path) -> tuple[socket.socket, int]:  # type: ignore[no-untyped-def]
-    subprocess.check_call([
-        "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-        "-keyout", str(tmp_path / "key.pem"),
-        "-out", str(tmp_path / "cert.pem"),
-        "-days", "1", "-subj", "/CN=localhost",
-    ], stderr=subprocess.DEVNULL)
+    subprocess.check_call(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            str(tmp_path / "key.pem"),
+            "-out",
+            str(tmp_path / "cert.pem"),
+            "-days",
+            "1",
+            "-subj",
+            "/CN=localhost",
+        ],
+        stderr=subprocess.DEVNULL,
+    )
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ctx.load_cert_chain(str(tmp_path / "cert.pem"), str(tmp_path / "key.pem"))
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -239,12 +258,15 @@ def _spin_local_tls(tmp_path) -> tuple[socket.socket, int]:  # type: ignore[no-u
 
 
 def test_https_probe_sets_discriminator_sni_based_when_wrong_sni_works(
-    monkeypatch, tmp_path,  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     srv, port = _spin_local_tls(tmp_path)
     real_wrap = ssl.SSLContext.wrap_socket
 
-    def selective_wrap(self, sock, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def selective_wrap(
+        self: ssl.SSLContext, sock: socket.socket, *args: Any, **kwargs: Any
+    ) -> ssl.SSLSocket:
         if kwargs.get("server_hostname") == "blocked.example":
             raise TimeoutError("simulated SNI-based DPI on real SNI")
         return real_wrap(self, sock, *args, **kwargs)
@@ -267,11 +289,12 @@ def test_https_probe_sets_discriminator_sni_based_when_wrong_sni_works(
 
 
 def test_https_probe_discriminator_inconclusive_when_both_fail(
-    monkeypatch, tmp_path,  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     srv, port = _spin_local_tls(tmp_path)
 
-    def always_fail(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def always_fail(self: ssl.SSLContext, *args: Any, **kwargs: Any) -> ssl.SSLSocket:
         raise TimeoutError("simulated IP-level block")
 
     monkeypatch.setattr(ssl.SSLContext, "wrap_socket", always_fail)
@@ -291,7 +314,8 @@ def test_https_probe_discriminator_inconclusive_when_both_fail(
 
 
 def test_https_probe_sets_discriminator_dns_based_when_doh_ip_works(
-    monkeypatch, tmp_path,  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     srv, port = _spin_local_tls(tmp_path)
 
@@ -323,14 +347,14 @@ def test_https_probe_sets_discriminator_dns_based_when_doh_ip_works(
 
 
 def test_https_discriminator_followups_are_bounded(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[tuple[str, float]] = []
     wrong_sni_timeouts: list[float] = []
 
     def fake_probe_once(**kwargs: object) -> Verdict:
         dns = str(kwargs["dns"])
-        timeout = float(kwargs["timeout"])
+        timeout = cast(float, kwargs["timeout"])
         calls.append((dns, timeout))
         if len(calls) == 1:
             return Verdict(
@@ -373,7 +397,7 @@ def test_https_discriminator_followups_are_bounded(
     assert all(timeout <= 2.0 for timeout in wrong_sni_timeouts)
 
 
-def test_https_probe_discriminator_unset_on_ok(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_https_probe_discriminator_unset_on_ok(tmp_path: Path) -> None:
     srv, port = _spin_local_tls(tmp_path)
     try:
         v = probe_https.probe(
@@ -390,12 +414,12 @@ def test_https_probe_discriminator_unset_on_ok(tmp_path) -> None:  # type: ignor
     assert v.discriminator is None
 
 
-def test_https_probe_accepts_colon_delimited_cert_fingerprint(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_https_probe_accepts_colon_delimited_cert_fingerprint(tmp_path: Path) -> None:
     srv, port = _spin_local_tls(tmp_path)
     pem = (tmp_path / "cert.pem").read_text()
     der = ssl.PEM_cert_to_DER_cert(pem)
     fp = hashlib.sha256(der).hexdigest()
-    colon_fp = ":".join(fp[i:i + 2] for i in range(0, len(fp), 2))
+    colon_fp = ":".join(fp[i : i + 2] for i in range(0, len(fp), 2))
     try:
         v = probe_https.probe(
             dns="127.0.0.1",

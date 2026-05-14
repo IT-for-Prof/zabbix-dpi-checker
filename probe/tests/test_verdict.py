@@ -76,11 +76,20 @@ def test_verdict_confidence_auto_derived_from_code() -> None:
     """Each verdict code maps to a default confidence; OK/DNS_LIE/HTTP_STUB → HIGH,
     PORT_FILTERED/REMOTE_DOWN → LOW, BANNER_MISMATCH/TLS_TIMEOUT → MEDIUM.
     """
-    high = {VerdictCode.OK, VerdictCode.DNS_LIE, VerdictCode.HTTP_STUB,
-            VerdictCode.TCP_RST_MID_STREAM, VerdictCode.TLS_RESET_POST_HELLO,
-            VerdictCode.CERT_MISMATCH}
-    low = {VerdictCode.PORT_FILTERED, VerdictCode.REMOTE_DOWN,
-           VerdictCode.UDP_BLIND, VerdictCode.ERROR_INTERNAL}
+    high = {
+        VerdictCode.OK,
+        VerdictCode.DNS_LIE,
+        VerdictCode.HTTP_STUB,
+        VerdictCode.TCP_RST_MID_STREAM,
+        VerdictCode.TLS_RESET_POST_HELLO,
+        VerdictCode.CERT_MISMATCH,
+    }
+    low = {
+        VerdictCode.PORT_FILTERED,
+        VerdictCode.REMOTE_DOWN,
+        VerdictCode.UDP_BLIND,
+        VerdictCode.ERROR_INTERNAL,
+    }
     for code in high:
         v = Verdict(code=code, reason="x", latency_ms=0.0)
         assert v.confidence == Confidence.HIGH, f"{code} should default HIGH"
@@ -89,8 +98,10 @@ def test_verdict_confidence_auto_derived_from_code() -> None:
         assert v.confidence == Confidence.LOW, f"{code} should default LOW"
     # MEDIUM bucket includes TCP_RST_HANDSHAKE, TLS_TIMEOUT, BANNER_MISMATCH, ROUTE_BLACKHOLE
     for code in (
-        VerdictCode.TCP_RST_HANDSHAKE, VerdictCode.TLS_TIMEOUT,
-        VerdictCode.BANNER_MISMATCH, VerdictCode.ROUTE_BLACKHOLE,
+        VerdictCode.TCP_RST_HANDSHAKE,
+        VerdictCode.TLS_TIMEOUT,
+        VerdictCode.BANNER_MISMATCH,
+        VerdictCode.ROUTE_BLACKHOLE,
     ):
         v = Verdict(code=code, reason="x", latency_ms=0.0)
         assert v.confidence == Confidence.MEDIUM, f"{code} should default MEDIUM"

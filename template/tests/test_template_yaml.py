@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -11,9 +12,9 @@ UUID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
 @pytest.fixture(scope="module")
-def doc() -> dict:  # type: ignore[type-arg]
+def doc() -> dict[str, Any]:
     assert TEMPLATE_PATH.exists(), f"missing {TEMPLATE_PATH}"
-    return yaml.safe_load(TEMPLATE_PATH.read_text())  # type: ignore[no-any-return]
+    return cast("dict[str, Any]", yaml.safe_load(TEMPLATE_PATH.read_text()))
 
 
 def test_top_level_has_zabbix_export_70_or_higher(doc: dict) -> None:  # type: ignore[type-arg]
@@ -33,11 +34,22 @@ def test_value_map_dpi_verdict_present_with_all_codes(doc: dict) -> None:  # typ
     assert UUID_RE.match(vmap["uuid"]), f"value map uuid invalid: {vmap['uuid']}"
     mappings = {m["value"]: m["newvalue"] for m in vmap["mappings"]}
     required = {
-        "OK", "TCP_RST_HANDSHAKE", "TCP_RST_MID_STREAM",
-        "TLS_RESET_POST_HELLO", "TLS_TIMEOUT", "CERT_MISMATCH",
-        "BANNER_MISMATCH", "REMOTE_HUNGUP_AFTER_CONNECT", "VANTAGE_UNAVAILABLE",
-        "DNS_LIE", "HTTP_STUB", "ROUTE_BLACKHOLE",
-        "PORT_FILTERED", "REMOTE_DOWN", "UDP_BLIND", "ERROR_INTERNAL",
+        "OK",
+        "TCP_RST_HANDSHAKE",
+        "TCP_RST_MID_STREAM",
+        "TLS_RESET_POST_HELLO",
+        "TLS_TIMEOUT",
+        "CERT_MISMATCH",
+        "BANNER_MISMATCH",
+        "REMOTE_HUNGUP_AFTER_CONNECT",
+        "VANTAGE_UNAVAILABLE",
+        "DNS_LIE",
+        "HTTP_STUB",
+        "ROUTE_BLACKHOLE",
+        "PORT_FILTERED",
+        "REMOTE_DOWN",
+        "UDP_BLIND",
+        "ERROR_INTERNAL",
     }
     missing = required - set(mappings)
     assert not missing, f"missing verdict mappings: {missing}"
@@ -85,7 +97,13 @@ def test_lld_rule_present_with_required_macros(doc: dict) -> None:  # type: igno
     js_src = raw[0] if isinstance(raw, list) else raw
     assert js_src, "JAVASCRIPT preprocessing step has no source body"
     for required_macro in (
-        "{#TARGET}", "{#DNS}", "{#REGION}", "{#KIND}", "{#PORT}", "{#SNI}", "{#CERT_FP}",
+        "{#TARGET}",
+        "{#DNS}",
+        "{#REGION}",
+        "{#KIND}",
+        "{#PORT}",
+        "{#SNI}",
+        "{#CERT_FP}",
     ):
         assert required_macro in js_src, f"JS preprocessing must emit {required_macro}"
 
@@ -102,9 +120,9 @@ def test_lld_rule_has_all_three_exclusion_conditions(doc: dict) -> None:  # type
     conds = lld.get("filter", {}).get("conditions") or []
     got = {(c["macro"], c["value"], c.get("operator", "")) for c in conds}
     expected = {
-        ("{#TARGET}", "^{HOST.HOST}$",         "NOT_MATCHES_REGEX"),
-        ("{#TARGET}", "{$DPI.SELF_TARGETS}",   "NOT_MATCHES_REGEX"),
-        ("{#KIND}",   "{$DPI.EXCLUDE_KINDS}",  "NOT_MATCHES_REGEX"),
+        ("{#TARGET}", "^{HOST.HOST}$", "NOT_MATCHES_REGEX"),
+        ("{#TARGET}", "{$DPI.SELF_TARGETS}", "NOT_MATCHES_REGEX"),
+        ("{#KIND}", "{$DPI.EXCLUDE_KINDS}", "NOT_MATCHES_REGEX"),
     }
     missing = expected - got
     assert not missing, f"LLD filter missing conditions: {missing}; have: {got}"
@@ -179,8 +197,9 @@ def test_item_prototypes_have_uuids_and_master_key(doc: dict) -> None:  # type: 
     dependent = [p for p in protos if p.get("type") == "DEPENDENT"]
     for dep in dependent:
         assert "master_item" in dep, f"dependent item {dep['key']} missing master_item"
-        assert master["key"] == dep["master_item"]["key"], \
+        assert master["key"] == dep["master_item"]["key"], (
             f"dependent {dep['key']} master_item key must match EXTERNAL item key"
+        )
 
 
 def test_vantage_template_has_control_items(doc: dict) -> None:  # type: ignore[type-arg]
@@ -206,7 +225,7 @@ def test_vantage_template_extracts_discriminator(doc: dict) -> None:  # type: ig
     assert preproc["error_handler"] == "CUSTOM_VALUE"
 
 
-def _all_trigger_prototypes(doc: dict) -> list[dict]:  # type: ignore[type-arg]
+def _all_trigger_prototypes(doc: dict[str, Any]) -> list[dict[str, Any]]:
     """Collect every trigger prototype from the template, walking both the
     LLD-level `trigger_prototypes` and the per-item-prototype nested ones.
 
@@ -216,7 +235,7 @@ def _all_trigger_prototypes(doc: dict) -> list[dict]:  # type: ignore[type-arg]
     LLD-top-level). Tests must walk both locations.
     """
     lld = doc["zabbix_export"]["templates"][0]["discovery_rules"][0]
-    triggers: list[dict] = list(lld.get("trigger_prototypes") or [])  # type: ignore[arg-type]
+    triggers = list(cast("list[dict[str, Any]]", lld.get("trigger_prototypes") or []))
     for ip in lld.get("item_prototypes") or []:
         triggers.extend(ip.get("trigger_prototypes") or [])
     return triggers
@@ -251,9 +270,9 @@ def test_vantage_template_has_only_diagnostic_info_triggers(doc: dict) -> None: 
     # The diagnostic Info trigger must exist (re-added after the aggregator
     # split — without it, a single dead vantage probe is silent because the
     # aggregator's stale sentinel only fires when ALL vantages go quiet).
-    info_stale = [t for t in triggers
-                  if t.get("priority") == "INFO"
-                  and "stale" in t.get("name", "").lower()]
+    info_stale = [
+        t for t in triggers if t.get("priority") == "INFO" and "stale" in t.get("name", "").lower()
+    ]
     assert info_stale, (
         "vantage template must have an Info-level per-vantage stale trigger "
         "(nodata on dpi.verdict). Without it, a single broken probe is "
@@ -262,8 +281,7 @@ def test_vantage_template_has_only_diagnostic_info_triggers(doc: dict) -> None: 
     expr = info_stale[0]["expression"]
     assert "nodata(" in expr, f"per-vantage stale trigger must use nodata(); got: {expr}"
     assert "{$DPI.NODATA_WINDOW}" in expr, (
-        f"per-vantage stale trigger must use the NODATA_WINDOW macro for "
-        f"tunability; got: {expr}"
+        f"per-vantage stale trigger must use the NODATA_WINDOW macro for tunability; got: {expr}"
     )
     assert '"strict"' in expr, (
         "per-vantage stale trigger must use nodata(...,'strict') so it doesn't "
@@ -271,9 +289,7 @@ def test_vantage_template_has_only_diagnostic_info_triggers(doc: dict) -> None: 
     )
     # No dependencies — this trigger is diagnostic, not gated by anything.
     deps = info_stale[0].get("dependencies") or []
-    assert deps == [], (
-        f"per-vantage stale trigger must be standalone (no deps); got: {deps}"
-    )
+    assert deps == [], f"per-vantage stale trigger must be standalone (no deps); got: {deps}"
 
 
 def test_vantage_template_has_no_aggregate_calc_items(doc: dict) -> None:  # type: ignore[type-arg]

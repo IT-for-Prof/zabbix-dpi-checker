@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -28,22 +29,22 @@ TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "dpi-mesh-aggregator.yaml"
 
 
 @pytest.fixture(scope="module")
-def doc() -> dict:  # type: ignore[type-arg]
+def doc() -> dict[str, Any]:
     with TEMPLATE_PATH.open() as f:
-        return yaml.safe_load(f)
+        return cast("dict[str, Any]", yaml.safe_load(f))
 
 
-def _template(doc: dict) -> dict:  # type: ignore[type-arg]
-    return doc["zabbix_export"]["templates"][0]
+def _template(doc: dict[str, Any]) -> dict[str, Any]:
+    return cast("dict[str, Any]", doc["zabbix_export"]["templates"][0])
 
 
-def _lld(doc: dict) -> dict:  # type: ignore[type-arg]
-    return _template(doc)["discovery_rules"][0]
+def _lld(doc: dict[str, Any]) -> dict[str, Any]:
+    return cast("dict[str, Any]", _template(doc)["discovery_rules"][0])
 
 
-def _all_trigger_prototypes(doc: dict) -> list[dict]:  # type: ignore[type-arg]
+def _all_trigger_prototypes(doc: dict[str, Any]) -> list[dict[str, Any]]:
     lld = _lld(doc)
-    triggers: list[dict] = list(lld.get("trigger_prototypes") or [])  # type: ignore[arg-type]
+    triggers = list(cast("list[dict[str, Any]]", lld.get("trigger_prototypes") or []))
     for ip in lld.get("item_prototypes") or []:
         triggers.extend(ip.get("trigger_prototypes") or [])
     return triggers
@@ -118,12 +119,12 @@ def test_three_calc_item_prototypes_present(doc: dict) -> None:  # type: ignore[
     via copy-paste)."""
     keys = {ip["key"]: ip for ip in (_lld(doc).get("item_prototypes") or [])}
     required = {
-        "dpi.peers_ok[{#TARGET},{#KIND},{#PORT}]":
-            ('"eq"', '"OK"'),  # counts OK verdicts only
-        "dpi.vantages_total[{#TARGET},{#KIND},{#PORT}]":
-            ('"regexp"', '"."'),  # counts ANY non-empty verdict
-        "dpi.affected[{#TARGET},{#KIND},{#PORT}]":
-            ('"ne"', '"OK"'),  # counts non-OK verdicts only
+        "dpi.peers_ok[{#TARGET},{#KIND},{#PORT}]": ('"eq"', '"OK"'),  # counts OK verdicts only
+        "dpi.vantages_total[{#TARGET},{#KIND},{#PORT}]": (
+            '"regexp"',
+            '"."',
+        ),  # counts ANY non-empty verdict
+        "dpi.affected[{#TARGET},{#KIND},{#PORT}]": ('"ne"', '"OK"'),  # counts non-OK verdicts only
     }
     assert set(keys) == set(required), (
         f"aggregator must have exactly these item prototypes; got {sorted(keys)}"
@@ -145,8 +146,7 @@ def test_three_calc_item_prototypes_present(doc: dict) -> None:  # type: ignore[
 
 
 def _by_priority(doc: dict) -> dict[str, dict]:  # type: ignore[type-arg]
-    return {t["priority"]: t for t in _all_trigger_prototypes(doc)
-            if "consensus" in t["name"]}
+    return {t["priority"]: t for t in _all_trigger_prototypes(doc) if "consensus" in t["name"]}
 
 
 def test_four_severity_tiers_with_auto_scaling_expressions(doc: dict) -> None:  # type: ignore[type-arg]
@@ -188,8 +188,7 @@ def test_four_severity_tiers_with_auto_scaling_expressions(doc: dict) -> None:  
     # also include the discriminator gate so PORT_FILTERED without a
     # fingerprint stays out of the alert path.
     debounce_re = re.compile(r'count\([^)]+,#3,"[a-z]+","\d+"\)=3')
-    for name, expr in [("INFO", info), ("WARNING", warn),
-                       ("AVERAGE", avg), ("HIGH", high)]:
+    for name, expr in [("INFO", info), ("WARNING", warn), ("AVERAGE", avg), ("HIGH", high)]:
         assert ",#3," in expr, f"{name}: must use #3 selector; got {expr}"
         assert debounce_re.search(expr), (
             f"{name}: must use count(...,#3,...)=3 debounce idiom "
@@ -228,10 +227,7 @@ def test_every_consensus_tier_has_opdata(doc: dict) -> None:  # type: ignore[typ
     by_prio = _by_priority(doc)
     for prio, t in by_prio.items():
         opdata = t.get("opdata") or ""
-        assert opdata.strip(), (
-            f"{prio}: consensus tier must have non-empty opdata; "
-            f"got {opdata!r}"
-        )
+        assert opdata.strip(), f"{prio}: consensus tier must have non-empty opdata; got {opdata!r}"
         assert "dpi=" in opdata, (
             f"{prio}: opdata must include dpi=… (count of vantages with a "
             f"discriminator fingerprint); got {opdata!r}"
@@ -256,8 +252,7 @@ def test_stale_trigger_and_dependencies(doc: dict) -> None:  # type: ignore[type
         "items don't trip before their first calc cycle"
     )
     assert stale["priority"] == "INFO", (
-        f"stale trigger must be INFO priority (diagnostic only); "
-        f"got {stale['priority']!r}"
+        f"stale trigger must be INFO priority (diagnostic only); got {stale['priority']!r}"
     )
 
     for t in (t for t in triggers if "consensus" in t["name"]):
@@ -277,6 +272,5 @@ def test_all_triggers_reference_aggregator_host_path(doc: dict) -> None:  # type
     expected_path = f"/{template_name}/"
     for t in _all_trigger_prototypes(doc):
         assert expected_path in t["expression"], (
-            f"trigger {t['name']!r} must reference {expected_path}; "
-            f"got: {t['expression']}"
+            f"trigger {t['name']!r} must reference {expected_path}; got: {t['expression']}"
         )

@@ -5,6 +5,7 @@ import ssl
 import struct
 import subprocess
 import threading
+from typing import cast
 
 import pytest
 
@@ -58,7 +59,10 @@ def test_smtps_handshake_timeout_returns_tls_timeout_not_reset() -> None:
 
     try:
         verdict = probe_smtp.probe(
-            dns="127.0.0.1", port=port, kind="smtps", timeout=0.5,
+            dns="127.0.0.1",
+            port=port,
+            kind="smtps",
+            timeout=0.5,
         )
     finally:
         server.close()
@@ -81,7 +85,10 @@ def test_smtps_handshake_rst_returns_tls_reset_post_hello() -> None:
 
     threading.Thread(target=reset_immediately, daemon=True).start()
     verdict = probe_smtp.probe(
-        dns="127.0.0.1", port=port, kind="smtps", timeout=2.0,
+        dns="127.0.0.1",
+        port=port,
+        kind="smtps",
+        timeout=2.0,
     )
     server.close()
 
@@ -106,12 +113,25 @@ def test_smtp_empty_banner_classifies_as_remote_hungup() -> None:
 
 
 def test_smtps_probe_fires_cert_mismatch_on_fingerprint_diff(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    subprocess.check_call([
-        "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-        "-keyout", str(tmp_path / "key.pem"),
-        "-out", str(tmp_path / "cert.pem"),
-        "-days", "1", "-subj", "/CN=localhost",
-    ], stderr=subprocess.DEVNULL)
+    subprocess.check_call(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            str(tmp_path / "key.pem"),
+            "-out",
+            str(tmp_path / "cert.pem"),
+            "-days",
+            "1",
+            "-subj",
+            "/CN=localhost",
+        ],
+        stderr=subprocess.DEVNULL,
+    )
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ctx.load_cert_chain(str(tmp_path / "cert.pem"), str(tmp_path / "key.pem"))
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -142,8 +162,8 @@ def test_smtps_probe_fires_cert_mismatch_on_fingerprint_diff(tmp_path) -> None: 
 
 
 def test_smtps_probe_sets_discriminator_sni_based_when_wrong_sni_works(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[str] = []
 
     def fake_probe_once(**kwargs: object) -> Verdict:
@@ -172,8 +192,8 @@ def test_smtps_probe_sets_discriminator_sni_based_when_wrong_sni_works(
 
 
 def test_smtps_probe_sets_discriminator_dns_based_when_doh_ip_works(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[str] = []
 
     def fake_probe_once(**kwargs: object) -> Verdict:
@@ -205,8 +225,8 @@ def test_smtps_probe_sets_discriminator_dns_based_when_doh_ip_works(
 
 
 def test_smtp_probe_does_not_run_discriminator_for_plain_smtp(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def fake_probe_once(**kwargs: object) -> Verdict:
         return Verdict(
             code=VerdictCode.PORT_FILTERED,
@@ -234,14 +254,14 @@ def test_smtp_probe_does_not_run_discriminator_for_plain_smtp(
 
 
 def test_smtps_discriminator_followups_are_bounded(
-    monkeypatch,
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[tuple[str, float]] = []
     wrong_sni_timeouts: list[float] = []
 
     def fake_probe_once(**kwargs: object) -> Verdict:
         dns = str(kwargs["dns"])
-        timeout = float(kwargs["timeout"])
+        timeout = cast(float, kwargs["timeout"])
         calls.append((dns, timeout))
         if len(calls) == 1:
             return Verdict(

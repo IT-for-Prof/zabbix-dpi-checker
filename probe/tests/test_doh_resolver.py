@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 import urllib.error
+import urllib.request
 from typing import Any
 
 import pytest
@@ -38,7 +39,7 @@ def _patch_urlopen(monkeypatch: pytest.MonkeyPatch, payload: bytes | Exception) 
             raise payload
         return _FakeResponse(payload)
 
-    monkeypatch.setattr(doh_resolver.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
 
 
 def _doh_payload(a_records: list[str]) -> bytes:
@@ -84,10 +85,10 @@ def test_resolve_doh_skips_malformed_answer_entries(monkeypatch: pytest.MonkeyPa
     payload = json.dumps(
         {
             "Answer": [
-                {"name": "x", "type": 1, "data": "1.2.3.4"},     # good
-                {"name": "x", "type": 1},                         # missing data
-                "not a dict",                                     # wrong shape
-                {"name": "x", "type": 5, "data": "alias.com"},   # CNAME, not A
+                {"name": "x", "type": 1, "data": "1.2.3.4"},  # good
+                {"name": "x", "type": 1},  # missing data
+                "not a dict",  # wrong shape
+                {"name": "x", "type": 5, "data": "alias.com"},  # CNAME, not A
             ]
         }
     ).encode("ascii")

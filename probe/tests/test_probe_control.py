@@ -15,11 +15,25 @@ from probe.lib.verdict import VerdictCode
 
 def test_control_probe_against_local_listener_returns_ok() -> None:
     with tempfile.TemporaryDirectory() as d:
-        subprocess.check_call([
-            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-            "-keyout", f"{d}/key.pem", "-out", f"{d}/cert.pem",
-            "-days", "1", "-subj", "/CN=localhost",
-        ], stderr=subprocess.DEVNULL)
+        subprocess.check_call(
+            [
+                "openssl",
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-keyout",
+                f"{d}/key.pem",
+                "-out",
+                f"{d}/cert.pem",
+                "-days",
+                "1",
+                "-subj",
+                "/CN=localhost",
+            ],
+            stderr=subprocess.DEVNULL,
+        )
         ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         ctx.load_cert_chain(f"{d}/cert.pem", f"{d}/key.pem")
 
@@ -81,7 +95,9 @@ def test_control_probe_timeout_ssl_error_maps_to_tls_timeout(
             conn.close()
 
     def fake_wrap_socket(
-        self: ssl.SSLContext, raw_sock: socket.socket, **kwargs: object,
+        self: ssl.SSLContext,
+        raw_sock: socket.socket,
+        **kwargs: object,
     ) -> ssl.SSLSocket:
         raise ssl.SSLError("The handshake operation timed out")
 

@@ -147,16 +147,20 @@ def main() -> NoReturn:
         if control_config_error is not None:
             _emit(control_config_error)
         if control_config is None:
-            _emit(Verdict(
-                code=VerdictCode.ERROR_INTERNAL,
-                reason="invalid control configuration",
-                latency_ms=0.0,
-            ))
-        _emit(probe_control(
-            host=control_config.host,
-            port=control_config.port,
-            timeout=control_config.timeout,
-        ))
+            _emit(
+                Verdict(
+                    code=VerdictCode.ERROR_INTERNAL,
+                    reason="invalid control configuration",
+                    latency_ms=0.0,
+                )
+            )
+        _emit(
+            probe_control(
+                host=control_config.host,
+                port=control_config.port,
+                timeout=control_config.timeout,
+            )
+        )
 
     if not all([args.target, args.kind, args.port, args.dns]):
         parser.error("target, kind, port, dns are required unless --control-only is set")
@@ -168,23 +172,27 @@ def main() -> NoReturn:
             if control_config_error is not None:
                 _emit(control_config_error)
             if control_config is None:
-                _emit(Verdict(
-                    code=VerdictCode.ERROR_INTERNAL,
-                    reason="invalid control configuration",
-                    latency_ms=0.0,
-                ))
+                _emit(
+                    Verdict(
+                        code=VerdictCode.ERROR_INTERNAL,
+                        reason="invalid control configuration",
+                        latency_ms=0.0,
+                    )
+                )
             ctrl = probe_control(
                 host=control_config.host,
                 port=control_config.port,
                 timeout=control_config.timeout,
             )
             if ctrl.code != VerdictCode.OK:
-                _emit(Verdict(
-                    code=VerdictCode.VANTAGE_UNAVAILABLE,
-                    reason=f"vantage control failed: {ctrl.reason}",
-                    latency_ms=ctrl.latency_ms,
-                    extra={"control_verdict": ctrl.code.value},
-                ))
+                _emit(
+                    Verdict(
+                        code=VerdictCode.VANTAGE_UNAVAILABLE,
+                        reason=f"vantage control failed: {ctrl.reason}",
+                        latency_ms=ctrl.latency_ms,
+                        extra={"control_verdict": ctrl.code.value},
+                    )
+                )
         if args.kind == "https":
             v = probe_https.probe(
                 dns=args.dns,

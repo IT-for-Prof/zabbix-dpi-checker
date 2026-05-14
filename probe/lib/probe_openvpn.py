@@ -144,8 +144,9 @@ def probe(*, dns: str, port: int, timeout: float, mode: OvpnMode = "udp") -> Ver
     return Verdict(
         code=VerdictCode.BANNER_MISMATCH,
         reason=(
-            f"response is not OpenVPN HARD_RESET_SERVER_V2: "
-            f"first byte = 0x{response[0]:02x}" if response else "empty response"
+            f"response is not OpenVPN HARD_RESET_SERVER_V2: first byte = 0x{response[0]:02x}"
+            if response
+            else "empty response"
         ),
         latency_ms=latency_ms,
         bytes_before_fail=len(response),
