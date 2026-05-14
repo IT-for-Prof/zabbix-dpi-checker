@@ -459,3 +459,34 @@ def test_cli_https_bytes_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> Non
     assert calls[0]["dns"] == "1.2.3.4"
     assert calls[0]["port"] == 443
     assert calls[0]["sni"] == "target.example.com"
+
+
+def test_cli_tls_frag_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
+    from probe import dpi_probe
+    from probe.lib import probe_tls_frag
+    from probe.lib.verdict import Verdict, VerdictCode
+
+    calls: list[dict[str, object]] = []
+
+    def fake_probe(**kwargs: object) -> Verdict:
+        calls.append(kwargs)
+        return Verdict(code=VerdictCode.OK, reason="stub", latency_ms=1.0)
+
+    monkeypatch.setattr(probe_tls_frag, "probe", fake_probe)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "rutracker.org",
+            "tls-frag",
+            "443",
+            "104.21.32.39",
+            "rutracker.org",
+            "10",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        dpi_probe.main()
+    assert exc.value.code == 0
+    assert calls
+    assert calls[0]["sni"] == "rutracker.org"

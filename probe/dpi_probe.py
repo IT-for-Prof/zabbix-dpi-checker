@@ -51,6 +51,7 @@ KINDS = (
     "wireguard",
     "openvpn",
     "https-bytes",
+    "tls-frag",
 )
 
 
@@ -262,6 +263,15 @@ def main() -> NoReturn:
             from probe.lib import probe_https_bytes
 
             v = probe_https_bytes.probe(
+                dns=args.dns,
+                port=args.port,
+                sni=args.sni or args.dns,
+                timeout=args.timeout,
+            )
+        elif args.kind == "tls-frag":
+            from probe.lib import probe_tls_frag
+
+            v = probe_tls_frag.probe(
                 dns=args.dns,
                 port=args.port,
                 sni=args.sni or args.dns,
