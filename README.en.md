@@ -44,7 +44,14 @@ the client public key as a `[Peer]` block on the WireGuard server side.
 
 `tspu-liveness` canary SNIs are configurable via
 `DPI_TSPU_LIVENESS_SNIS` (comma-separated). Default:
-`rutracker.org,x.com,www.linkedin.com`.
+`rutracker.org,x.com,www.linkedin.com`. Quorum override:
+`DPI_TSPU_LIVENESS_QUORUM` (absolute int) or
+`DPI_TSPU_LIVENESS_QUORUM_RATIO` (float in (0,1]).
+
+`tspu-liveness` runs at its own cadence `{$DPI.LIVENESS_INTERVAL}`
+(default `15m`), separate from `{$DPI.INTERVAL}` (default `5m` for
+per-target probes) — the canary SNIs are public sites and we shouldn't
+hammer them every 5 minutes from N vantages.
 
 ## Components
 

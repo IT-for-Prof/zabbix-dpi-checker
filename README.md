@@ -583,6 +583,7 @@ proxy-машины) — отдельный пользователь только
 |---|---|---|
 | `{$DPI.API_URL}` | `https://your-zabbix.example.com/api_jsonrpc.php` | Только если фронтенд Zabbix на другом URL или с vantage есть быстрый внутренний путь |
 | `{$DPI.INTERVAL}` | `5m` | Если нужно учащение/разрежение опроса для отдельного vantage |
+| `{$DPI.LIVENESS_INTERVAL}` | `15m` | Отдельный cadence для `tspu-liveness` пробы — публичные канарееч-SNI (rutracker.org, x.com, www.linkedin.com) пробивать каждые 5 минут с N vantages = слишком навязчиво; 15 минут ловит TSPU on/off transitions внутри часа |
 | `{$DPI.PROBE_TIMEOUT}` | `10` | Если сеть с vantage медленнее обычной |
 | `{$DPI.NODATA_WINDOW}` | `1h` | Окно для stale-data trigger; уменьшать только если нужен более быстрый сигнал «probe умер» |
 | `{$DPI.CERT_FINGERPRINT}` | пусто | На target host, если нужно pin'ить HTTPS/SMTPS leaf certificate SHA-256 |
@@ -749,8 +750,7 @@ dpi_probe: target=mail.example.com kind=smtp port=25 dns=mail.example.com verdic
 | `{$DPI.REGION}` | да | `EU` | Географический регион цели (RU/BY/EU) |
 | `{$DPI.KINDS}` | да | `https:443,smtp:25,smtps:465` | Протоколы и порты через запятую |
 | `{$DPI.SNI}` | нет | `example.com` | TLS SNI (по умолчанию = `{$DPI.DNS}`) |
-| `{$DPI.WG.PUBKEY}` | нет | `base64==` | WireGuard публичный ключ сервера |
-| `{$DPI.OVPN.MODE}` | нет | `udp` | OpenVPN транспорт: `udp` или `tcp` |
+| `{$DPI.WG.PUBKEY}` | нет | `base64==` | WireGuard публичный ключ сервера (для `wireguard` kind — pubkey-aware UDP-probe) |
 
 **Формат `{$DPI.KINDS}`:**
 
