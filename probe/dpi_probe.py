@@ -54,7 +54,6 @@ KINDS = (
     "tls-frag",
     "tspu-liveness",
     "wg-rekey",
-    "quic",
 )
 
 
@@ -322,15 +321,6 @@ def main() -> NoReturn:
                         timeout=args.timeout,
                         ping_target=os.environ.get("DPI_WG_REKEY_PING") or None,
                     )
-        elif args.kind == "quic":
-            from probe.lib import probe_quic
-
-            v = probe_quic.probe(
-                dns=args.dns,
-                port=args.port,
-                sni=args.sni or args.dns,
-                timeout=args.timeout,
-            )
         else:
             v = Verdict(
                 code=VerdictCode.ERROR_INTERNAL,

@@ -60,7 +60,6 @@ def test_cli_help_lists_all_kinds() -> None:
         "tls-frag",
         "tspu-liveness",
         "wg-rekey",
-        "quic",
     ):
         assert kind in out
 
@@ -620,37 +619,6 @@ def test_cli_wg_rekey_invalid_keepalive_emits_internal_error(
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["verdict"] == "ERROR_INTERNAL"
     assert "DPI_WG_REKEY_KEEPALIVE" in payload["reason"]
-
-
-def test_cli_quic_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
-    from probe import dpi_probe
-    from probe.lib import probe_quic
-    from probe.lib.verdict import Verdict, VerdictCode
-
-    calls: list[dict[str, object]] = []
-
-    def fake_probe(**kwargs: object) -> Verdict:
-        calls.append(kwargs)
-        return Verdict(VerdictCode.OK, "stub", 1.0)
-
-    monkeypatch.setattr(probe_quic, "probe", fake_probe)
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "dpi_probe",
-            "cloudflare-quic.com",
-            "quic",
-            "443",
-            "1.1.1.1",
-            "cloudflare-quic.com",
-            "5",
-        ],
-    )
-    with pytest.raises(SystemExit) as exc:
-        dpi_probe.main()
-    assert exc.value.code == 0
-    assert calls
-    assert calls[0]["sni"] == "cloudflare-quic.com"
 
 
 def test_cli_wireguard_passes_pubkey_via_cert_fp_slot(

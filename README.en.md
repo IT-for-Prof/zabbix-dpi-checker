@@ -35,7 +35,6 @@ runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
 | `tls-frag` | ClientHello in 4-byte TCP segments | Fragmentation bypass signal for SNI-parser DPI |
 | `tspu-liveness` | Aggregate canary-SNI probe | `TSPU_ACTIVE` flag per vantage |
 | `wg-rekey` | Forced fresh WireGuard handshake | `WG_REKEY_PASS` / `WG_REKEY_BLOCKED` |
-| `quic` | Initial-shaped UDP/QUIC probe | `UDP_BLIND` on no reply; long-header response means QUIC reachable |
 
 `wg-rekey` deployment requires `/usr/bin/wg`, passwordless sudo for the
 `zabbix` user via `deploy/sudoers.d/dpi-probe`, and per-peer config via
