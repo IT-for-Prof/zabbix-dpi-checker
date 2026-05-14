@@ -172,10 +172,23 @@ ensure_venv() {
 # If the project gains more deps, update both this line and pyproject.toml.
 install_deps() {
     local deps="cryptography>=42"
+    # Older venvs may lack pip (created implicitly with --without-pip, or
+    # before this branch added install_deps at all). Detect and bootstrap
+    # via ensurepip — works as long as the Python ships ensurepip (the
+    # python3-venv apt package; required for `python -m venv` anyway).
+    if [[ ! -x "${VENV_DIR}/bin/pip" ]]; then
+        log "pip missing in venv; bootstrapping via ensurepip"
+        "${VENV_DIR}/bin/python" -m ensurepip --upgrade --default-pip \
+            >> "${LOG_FILE}" 2>&1 \
+            || { log "FATAL: ensurepip failed — remove ${VENV_DIR} and re-run installer"; exit 1; }
+    fi
     log "Installing project dependencies into venv: ${deps}"
-    "${VENV_DIR}/bin/pip" install --quiet --disable-pip-version-check --upgrade-strategy only-if-needed ${deps} \
+    # NOTE: no --quiet so pip's real error (network issue, missing wheel,
+    # missing build deps for source-only install) lands in ${LOG_FILE}
+    # verbatim instead of being hidden behind a generic FATAL message.
+    "${VENV_DIR}/bin/pip" install --disable-pip-version-check --upgrade-strategy only-if-needed ${deps} \
         >> "${LOG_FILE}" 2>&1 \
-        || { log "FATAL: pip install ${deps} failed"; exit 1; }
+        || { log "FATAL: pip install ${deps} failed — see ${LOG_FILE} above for pip's output"; exit 1; }
     log "Dependencies installed"
 }
 
