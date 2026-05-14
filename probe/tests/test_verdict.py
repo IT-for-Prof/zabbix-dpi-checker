@@ -61,6 +61,11 @@ def test_verdict_code_is_str_enum_with_expected_values() -> None:
         "REMOTE_DOWN",
         "UDP_BLIND",
         "ERROR_INTERNAL",
+        "TSPU_ACTIVE",
+        "TSPU_BYPASS_OK",
+        "THROTTLE_DETECTED",
+        "WG_REKEY_PASS",
+        "WG_REKEY_BLOCKED",
     }
     assert {c.value for c in VerdictCode} == expected
 
@@ -152,3 +157,28 @@ def test_discriminator_values() -> None:
         "dns_based",
         "inconclusive",
     }
+
+
+def test_new_verdict_codes_have_default_confidence() -> None:
+    expected = {
+        VerdictCode.TSPU_ACTIVE: Confidence.HIGH,
+        VerdictCode.TSPU_BYPASS_OK: Confidence.HIGH,
+        VerdictCode.THROTTLE_DETECTED: Confidence.HIGH,
+        VerdictCode.WG_REKEY_PASS: Confidence.HIGH,
+        VerdictCode.WG_REKEY_BLOCKED: Confidence.HIGH,
+    }
+    for code, conf in expected.items():
+        v = Verdict(code=code, reason="x", latency_ms=1.0)
+        assert v.confidence == conf, f"{code}: expected {conf}, got {v.confidence}"
+
+
+def test_new_verdict_codes_serialize_to_string_name() -> None:
+    payload = json.loads(
+        Verdict(
+            code=VerdictCode.TSPU_ACTIVE,
+            reason="r",
+            latency_ms=2.0,
+        ).to_json()
+    )
+    assert payload["verdict"] == "TSPU_ACTIVE"
+    assert payload["confidence"] == "HIGH"

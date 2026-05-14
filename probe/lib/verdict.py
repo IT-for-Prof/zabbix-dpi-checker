@@ -28,6 +28,11 @@ class VerdictCode(StrEnum):
     REMOTE_DOWN = "REMOTE_DOWN"  # connection refused — service down on host
     UDP_BLIND = "UDP_BLIND"  # UDP probe couldn't classify (no key etc.)
     ERROR_INTERNAL = "ERROR_INTERNAL"  # probe itself failed — bug or env issue
+    TSPU_ACTIVE = "TSPU_ACTIVE"  # known-blocked SNIs RST/timeout from this vantage
+    TSPU_BYPASS_OK = "TSPU_BYPASS_OK"  # known-blocked SNI reachable via bypass probe
+    THROTTLE_DETECTED = "THROTTLE_DETECTED"  # bytes-counter RST in expected window
+    WG_REKEY_PASS = "WG_REKEY_PASS"  # forced fresh WG handshake completed
+    WG_REKEY_BLOCKED = "WG_REKEY_BLOCKED"  # forced fresh WG handshake produced no response
 
 
 class Confidence(StrEnum):
@@ -64,6 +69,11 @@ _DEFAULT_CONFIDENCE: dict[VerdictCode, Confidence] = {
     VerdictCode.TLS_RESET_POST_HELLO: Confidence.HIGH,
     VerdictCode.CERT_MISMATCH: Confidence.HIGH,
     VerdictCode.HTTP_STUB: Confidence.HIGH,
+    VerdictCode.TSPU_ACTIVE: Confidence.HIGH,
+    VerdictCode.TSPU_BYPASS_OK: Confidence.HIGH,
+    VerdictCode.THROTTLE_DETECTED: Confidence.HIGH,
+    VerdictCode.WG_REKEY_PASS: Confidence.HIGH,
+    VerdictCode.WG_REKEY_BLOCKED: Confidence.HIGH,
     VerdictCode.TCP_RST_HANDSHAKE: Confidence.MEDIUM,
     VerdictCode.TLS_TIMEOUT: Confidence.MEDIUM,
     VerdictCode.BANNER_MISMATCH: Confidence.MEDIUM,
