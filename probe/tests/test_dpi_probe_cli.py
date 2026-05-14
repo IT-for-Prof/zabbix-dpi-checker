@@ -426,3 +426,36 @@ def test_cli_accepts_template_arg_order_with_cert_fp_and_control(
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["verdict"] == "OK"
     assert captured_kwargs["expect_cert_fp"] is None
+
+
+def test_cli_https_bytes_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
+    from probe import dpi_probe
+    from probe.lib import probe_https_bytes
+    from probe.lib.verdict import Verdict, VerdictCode
+
+    calls: list[dict[str, object]] = []
+
+    def fake_probe(**kwargs: object) -> Verdict:
+        calls.append(kwargs)
+        return Verdict(code=VerdictCode.OK, reason="stub", latency_ms=1.0)
+
+    monkeypatch.setattr(probe_https_bytes, "probe", fake_probe)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "target.example.com",
+            "https-bytes",
+            "443",
+            "1.2.3.4",
+            "target.example.com",
+            "10",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        dpi_probe.main()
+    assert exc.value.code == 0
+    assert calls, "probe_https_bytes.probe was not called"
+    assert calls[0]["dns"] == "1.2.3.4"
+    assert calls[0]["port"] == 443
+    assert calls[0]["sni"] == "target.example.com"

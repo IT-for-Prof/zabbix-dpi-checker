@@ -41,7 +41,17 @@ from probe.lib import (  # noqa: E402
 )
 from probe.lib.verdict import Verdict, VerdictCode  # noqa: E402
 
-KINDS = ("https", "smtp", "smtps", "rdp", "rdgw", "ssh", "wireguard", "openvpn")
+KINDS = (
+    "https",
+    "smtp",
+    "smtps",
+    "rdp",
+    "rdgw",
+    "ssh",
+    "wireguard",
+    "openvpn",
+    "https-bytes",
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -246,6 +256,15 @@ def main() -> NoReturn:
             v = probe_openvpn.probe(
                 dns=args.dns,
                 port=args.port,
+                timeout=args.timeout,
+            )
+        elif args.kind == "https-bytes":
+            from probe.lib import probe_https_bytes
+
+            v = probe_https_bytes.probe(
+                dns=args.dns,
+                port=args.port,
+                sni=args.sni or args.dns,
                 timeout=args.timeout,
             )
         else:
