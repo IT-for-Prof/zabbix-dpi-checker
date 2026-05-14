@@ -53,6 +53,7 @@ KINDS = (
     "https-bytes",
     "tls-frag",
     "tspu-liveness",
+    "wg-rekey",
 )
 
 
@@ -282,6 +283,37 @@ def main() -> NoReturn:
             from probe.lib import probe_tspu_liveness
 
             v = probe_tspu_liveness.probe(timeout=args.timeout)
+        elif args.kind == "wg-rekey":
+            from probe.lib import probe_wg_rekey
+
+            required = (
+                "DPI_WG_REKEY_IFACE",
+                "DPI_WG_REKEY_PEER",
+                "DPI_WG_REKEY_ORIG_EP",
+                "DPI_WG_REKEY_ALLOWED_IPS",
+            )
+            missing = [key for key in required if not os.environ.get(key)]
+            if missing:
+                v = Verdict(
+                    code=VerdictCode.ERROR_INTERNAL,
+                    reason=f"wg-rekey: missing env vars: {','.join(missing)}",
+                    latency_ms=0.0,
+                )
+            else:
+                try:
+                    keepalive = int(os.environ.get("DPI_WG_REKEY_KEEPALIVE", "25"))
+                except ValueError:
+                    keepalive = 25
+                v = probe_wg_rekey.probe(
+                    iface=os.environ["DPI_WG_REKEY_IFACE"],
+                    peer_pubkey=os.environ["DPI_WG_REKEY_PEER"],
+                    test_endpoint=f"{args.dns}:{args.port}",
+                    orig_endpoint=os.environ["DPI_WG_REKEY_ORIG_EP"],
+                    allowed_ips=os.environ["DPI_WG_REKEY_ALLOWED_IPS"],
+                    keepalive=keepalive,
+                    timeout=args.timeout,
+                    ping_target=os.environ.get("DPI_WG_REKEY_PING") or None,
+                )
         else:
             v = Verdict(
                 code=VerdictCode.ERROR_INTERNAL,

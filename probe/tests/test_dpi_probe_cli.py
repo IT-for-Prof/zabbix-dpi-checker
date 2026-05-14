@@ -521,3 +521,62 @@ def test_cli_tspu_liveness_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> N
     assert exc.value.code == 0
     assert calls
     assert calls[0]["timeout"] == 30.0
+
+
+def test_cli_wg_rekey_kind_reads_env_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    from probe import dpi_probe
+    from probe.lib import probe_wg_rekey
+    from probe.lib.verdict import Verdict, VerdictCode
+
+    calls: list[dict[str, object]] = []
+
+    def fake_probe(**kwargs: object) -> Verdict:
+        calls.append(kwargs)
+        return Verdict(VerdictCode.WG_REKEY_PASS, "stub", 1.0)
+
+    monkeypatch.setattr(probe_wg_rekey, "probe", fake_probe)
+    monkeypatch.setenv("DPI_WG_REKEY_IFACE", "wg_ifp")
+    monkeypatch.setenv("DPI_WG_REKEY_PEER", "PEERPUB=")
+    monkeypatch.setenv("DPI_WG_REKEY_ORIG_EP", "127.0.0.1:5599")
+    monkeypatch.setenv("DPI_WG_REKEY_ALLOWED_IPS", "192.168.255.1/32")
+    monkeypatch.setenv("DPI_WG_REKEY_KEEPALIVE", "25")
+    monkeypatch.setenv("DPI_WG_REKEY_PING", "192.168.255.1")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["dpi_probe", "65.21.40.204", "wg-rekey", "5599", "65.21.40.204", "", "10"],
+    )
+    with pytest.raises(SystemExit) as exc:
+        dpi_probe.main()
+    assert exc.value.code == 0
+    assert calls
+    call = calls[0]
+    assert call["iface"] == "wg_ifp"
+    assert call["peer_pubkey"] == "PEERPUB="
+    assert call["test_endpoint"] == "65.21.40.204:5599"
+    assert call["orig_endpoint"] == "127.0.0.1:5599"
+    assert call["ping_target"] == "192.168.255.1"
+
+
+def test_cli_wg_rekey_missing_env_emits_internal_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from probe import dpi_probe
+
+    for key in (
+        "DPI_WG_REKEY_IFACE",
+        "DPI_WG_REKEY_PEER",
+        "DPI_WG_REKEY_ORIG_EP",
+        "DPI_WG_REKEY_ALLOWED_IPS",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["dpi_probe", "65.21.40.204", "wg-rekey", "5599", "65.21.40.204", "", "10"],
+    )
+    with pytest.raises(SystemExit) as exc:
+        dpi_probe.main()
+    assert exc.value.code == 0
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["verdict"] == "ERROR_INTERNAL"
+    assert "DPI_WG_REKEY_" in payload["reason"]

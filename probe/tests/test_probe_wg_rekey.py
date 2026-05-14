@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+from collections.abc import Callable
 from unittest import mock
 
 import pytest
@@ -12,7 +13,7 @@ from probe.lib import probe_wg_rekey
 from probe.lib.verdict import VerdictCode
 
 
-def _mock_wg_runner(scripted_outputs: list[tuple[str, str]]):
+def _mock_wg_runner(scripted_outputs: list[tuple[str, str]]) -> Callable[..., mock.Mock]:
     it = iter(scripted_outputs)
 
     def runner(cmd: list[str], **kwargs: object) -> mock.Mock:
