@@ -291,7 +291,7 @@ zabbix_export:
           name: 'DPI TSPU liveness (vantage-level)'
           type: EXTERNAL
           key: 'dpi_probe[vantage-self,tspu-liveness,0,vantage-self,vantage-self,30]'
-          delay: '{$DPI.INTERVAL}'
+          delay: '{$DPI.LIVENESS_INTERVAL}'
           history: 30d
           value_type: TEXT
           trends: '0'
@@ -371,6 +371,15 @@ zabbix_export:
             Polling interval for the master item. 5m is balanced for catching DPI
             within minutes without overloading the prober. Don't go below 1m unless
             you've measured impact.
+        - macro: '{$DPI.LIVENESS_INTERVAL}'
+          value: 15m
+          description: |
+            Polling interval for the TSPU-liveness aggregate probe — separate
+            from {$DPI.INTERVAL} because the canary SNIs (rutracker.org, x.com,
+            linkedin.com by default) are public sites and we should not pummel
+            them every 5 minutes from N vantages. 15m gives ~4 cycles/hour/vantage,
+            tight enough to catch TSPU on/off transitions within the hour.
+            Override per-vantage if your operational tradeoff differs.
         - macro: '{$DPI.CERT_FINGERPRINT}'
           value: ''
           description: 'Optional expected leaf certificate SHA-256 fingerprint for HTTPS/SMTPS targets. Leave empty to disable certificate pinning; override on target hosts that need MITM/cert-substitution detection. WireGuard uses target macro {$DPI.WG.PUBKEY} instead.'

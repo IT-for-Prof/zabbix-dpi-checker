@@ -27,7 +27,7 @@ def _make_cert(tmp_path: Path) -> tuple[Path, Path]:
     return cert, key
 
 
-def _tls_echo_server(sock, ctx, rst_after_bytes: int | None) -> None:
+def _tls_echo_server(sock: socket.socket, ctx: ssl.SSLContext, rst_after_bytes: int | None) -> None:
     """Echo received bytes back. Optionally force RST after N bytes received.
 
     Force-RST pattern: SO_LINGER 0 on the raw socket BEFORE TLS wrap, then
@@ -69,7 +69,7 @@ def _tls_echo_server(sock, ctx, rst_after_bytes: int | None) -> None:
 
 
 @pytest.fixture
-def tls_server(tmp_path):
+def tls_server(tmp_path: Path) -> tuple[ssl.SSLContext, socket.socket, int]:
     cert, key = _make_cert(tmp_path)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert, key)
@@ -80,7 +80,9 @@ def tls_server(tmp_path):
     return ctx, sock, port
 
 
-def test_bytes_counter_no_throttle_returns_ok(tls_server) -> None:
+def test_bytes_counter_no_throttle_returns_ok(
+    tls_server: tuple[ssl.SSLContext, socket.socket, int],
+) -> None:
     ctx, sock, port = tls_server
     t = threading.Thread(target=_tls_echo_server, args=(sock, ctx, None), daemon=True)
     t.start()
@@ -93,7 +95,9 @@ def test_bytes_counter_no_throttle_returns_ok(tls_server) -> None:
     assert v.code == VerdictCode.OK, f"got {v.code}: {v.reason}"
 
 
-def test_bytes_counter_rst_in_window_returns_throttle(tls_server) -> None:
+def test_bytes_counter_rst_in_window_returns_throttle(
+    tls_server: tuple[ssl.SSLContext, socket.socket, int],
+) -> None:
     ctx, sock, port = tls_server
     t = threading.Thread(target=_tls_echo_server, args=(sock, ctx, 18000), daemon=True)
     t.start()
@@ -109,7 +113,9 @@ def test_bytes_counter_rst_in_window_returns_throttle(tls_server) -> None:
     assert 14000 <= v.bytes_before_fail <= 34000, f"bytes_before_fail={v.bytes_before_fail}"
 
 
-def test_bytes_counter_rst_outside_window_returns_generic_rst(tls_server) -> None:
+def test_bytes_counter_rst_outside_window_returns_generic_rst(
+    tls_server: tuple[ssl.SSLContext, socket.socket, int],
+) -> None:
     ctx, sock, port = tls_server
     t = threading.Thread(target=_tls_echo_server, args=(sock, ctx, 200), daemon=True)
     t.start()
@@ -123,14 +129,18 @@ def test_bytes_counter_rst_outside_window_returns_generic_rst(tls_server) -> Non
     assert v.code == VerdictCode.TCP_RST_MID_STREAM, f"got {v.code}: {v.reason}"
 
 
-def test_bytes_counter_clean_tls_close_is_not_throttle(tls_server) -> None:
+def test_bytes_counter_clean_tls_close_is_not_throttle(
+    tls_server: tuple[ssl.SSLContext, socket.socket, int],
+) -> None:
     """Server cleanly closes TLS (close-notify) mid-stream → ssl.SSLZeroReturnError
     on the client → must classify as OK (no RST), NOT THROTTLE_DETECTED.
     Guards the _is_rst_error logic that says SSLZeroReturnError is a clean close.
     """
     ctx, sock, port = tls_server
 
-    def _tls_clean_close_mid_stream(sock, ctx, close_after_bytes):
+    def _tls_clean_close_mid_stream(
+        sock: socket.socket, ctx: ssl.SSLContext, close_after_bytes: int
+    ) -> None:
         """Echo until close_after_bytes received, then do a graceful TLS close-notify."""
         import ssl as _ssl
         try:
