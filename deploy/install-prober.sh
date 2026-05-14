@@ -163,7 +163,20 @@ ensure_venv() {
     log "Creating venv at ${VENV_DIR} using ${py}"
     mkdir -p "${INSTALL_DIR}"
     "$py" -m venv "${VENV_DIR}"
-    # stdlib only — no pip install needed
+}
+
+# --- Install project dependencies into venv -------------------------------
+# The wg-handshake probe kind needs the `cryptography` library for X25519 +
+# ChaCha20-Poly1305 (BLAKE2s is stdlib). Declared in pyproject.toml
+# [project.dependencies]; pinned here so the installer doesn't need to parse TOML.
+# If the project gains more deps, update both this line and pyproject.toml.
+install_deps() {
+    local deps="cryptography>=42"
+    log "Installing project dependencies into venv: ${deps}"
+    "${VENV_DIR}/bin/pip" install --quiet --disable-pip-version-check --upgrade-strategy only-if-needed ${deps} \
+        >> "${LOG_FILE}" 2>&1 \
+        || { log "FATAL: pip install ${deps} failed"; exit 1; }
+    log "Dependencies installed"
 }
 
 deploy_probe() {
@@ -250,6 +263,7 @@ main() {
 
     install_python_3
     ensure_venv
+    install_deps
     deploy_probe
     ensure_externalscripts_dir
     install_externalscripts_symlink
