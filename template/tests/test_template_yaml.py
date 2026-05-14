@@ -55,6 +55,19 @@ def test_value_map_dpi_verdict_present_with_all_codes(doc: dict) -> None:  # typ
     assert not missing, f"missing verdict mappings: {missing}"
 
 
+def test_valuemap_contains_new_verdict_codes(doc: dict[str, Any]) -> None:
+    from probe.lib.verdict import VerdictCode
+
+    tpl = doc["zabbix_export"]["templates"][0]
+    vmaps = tpl.get("valuemaps") or []
+    dpi_vm = next(vm for vm in vmaps if vm["name"] == "DPI verdict")
+    mapped_values = {m["value"] for m in dpi_vm["mappings"]}
+
+    required = {code.value for code in VerdictCode}
+    missing = required - mapped_values
+    assert not missing, f"DPI verdict valuemap missing entries: {sorted(missing)}"
+
+
 def test_template_block_present_with_uuid_and_macros(doc: dict) -> None:  # type: ignore[type-arg]
     tpls = doc["zabbix_export"].get("templates") or []
     assert len(tpls) == 1, "expected exactly one template"

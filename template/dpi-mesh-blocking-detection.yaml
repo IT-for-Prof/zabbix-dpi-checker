@@ -365,3 +365,13 @@ zabbix_export:
               newvalue: 'UDP blind — no pubkey'
             - value: ERROR_INTERNAL
               newvalue: 'Probe internal error'
+            - value: TSPU_ACTIVE
+              newvalue: 'TSPU active — canary SNIs blocked from this vantage'
+            - value: TSPU_BYPASS_OK
+              newvalue: 'TSPU bypass — fragmented CH or tunnel reaches blocked SNI'
+            - value: THROTTLE_DETECTED
+              newvalue: 'TSPU bytes-counter throttle hit (RST in 14-34 KB window)'
+            - value: WG_REKEY_PASS
+              newvalue: 'WG fresh handshake completed against test endpoint'
+            - value: WG_REKEY_BLOCKED
+              newvalue: 'WG fresh handshake blocked — no server response'
