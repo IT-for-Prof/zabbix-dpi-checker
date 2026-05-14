@@ -369,6 +369,27 @@ ground truth для «работает / не работает».
 | `wireguard` | 51820 | UDP → WireGuard Handshake Initiation (без валидного ключа) |
 | `openvpn` | 1194 | UDP/TCP → OpenVPN HARD_RESET_CLIENT_V2 |
 
+### New probe kinds (added 2026-05-14)
+
+| Kind | Purpose | TSPU signature it catches |
+|---|---|---|
+| `https-bytes` | Push 32 KB after TLS handshake | `THROTTLE_DETECTED` if RST lands in the 14-34 KB window |
+| `tls-frag` | ClientHello in 4-byte TCP segments | Fragmentation bypass signal for SNI-parser DPI |
+| `tspu-liveness` | Aggregate canary-SNI probe | `TSPU_ACTIVE` flag per vantage |
+| `wg-rekey` | Forced fresh WireGuard handshake | `WG_REKEY_PASS` / `WG_REKEY_BLOCKED` |
+| `quic` | RFC-9000 Initial packet | `PORT_FILTERED` if QUIC/UDP is dropped |
+
+`wg-rekey` deployment requires `/usr/bin/wg`, passwordless sudo for the
+`zabbix` user via `deploy/sudoers.d/dpi-probe`, and per-peer config via
+environment variables: `DPI_WG_REKEY_IFACE`, `DPI_WG_REKEY_PEER`,
+`DPI_WG_REKEY_ORIG_EP`, `DPI_WG_REKEY_ALLOWED_IPS`,
+`DPI_WG_REKEY_KEEPALIVE` (optional, default `25`), and
+`DPI_WG_REKEY_PING` (optional AllowedIPs target to force traffic).
+
+`tspu-liveness` canary SNIs are configurable via
+`DPI_TSPU_LIVENESS_SNIS` (comma-separated). Default:
+`rutracker.org,x.com,www.linkedin.com`.
+
 ---
 
 ## Примеры probe-вывода
