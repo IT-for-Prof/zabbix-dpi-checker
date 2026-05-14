@@ -53,7 +53,7 @@ KINDS = (
     "https-bytes",
     "tls-frag",
     "tspu-liveness",
-    "wg-rekey",
+    "wg-handshake",
 )
 
 
@@ -284,43 +284,30 @@ def main() -> NoReturn:
             from probe.lib import probe_tspu_liveness
 
             v = probe_tspu_liveness.probe(timeout=args.timeout)
-        elif args.kind == "wg-rekey":
-            from probe.lib import probe_wg_rekey
+        elif args.kind == "wg-handshake":
+            from probe.lib import probe_wg_handshake
 
             required = (
-                "DPI_WG_REKEY_IFACE",
-                "DPI_WG_REKEY_PEER",
-                "DPI_WG_REKEY_TEST_EP",
-                "DPI_WG_REKEY_ORIG_EP",
-                "DPI_WG_REKEY_ALLOWED_IPS",
+                "DPI_WG_SERVER_PUB",
+                "DPI_WG_CLIENT_PRIV",
+                "DPI_WG_CLIENT_PUB",
             )
-            missing = [key for key in required if not os.environ.get(key)]
+            missing = [k for k in required if not os.environ.get(k)]
             if missing:
                 v = Verdict(
                     code=VerdictCode.ERROR_INTERNAL,
-                    reason=f"wg-rekey: missing env vars: {','.join(missing)}",
+                    reason=f"wg-handshake: missing env vars: {','.join(missing)}",
                     latency_ms=0.0,
                 )
             else:
-                try:
-                    keepalive = int(os.environ.get("DPI_WG_REKEY_KEEPALIVE", "25"))
-                except ValueError as e:
-                    v = Verdict(
-                        code=VerdictCode.ERROR_INTERNAL,
-                        reason=f"wg-rekey: invalid DPI_WG_REKEY_KEEPALIVE: {e}",
-                        latency_ms=0.0,
-                    )
-                else:
-                    v = probe_wg_rekey.probe(
-                        iface=os.environ["DPI_WG_REKEY_IFACE"],
-                        peer_pubkey=os.environ["DPI_WG_REKEY_PEER"],
-                        test_endpoint=os.environ["DPI_WG_REKEY_TEST_EP"],
-                        orig_endpoint=os.environ["DPI_WG_REKEY_ORIG_EP"],
-                        allowed_ips=os.environ["DPI_WG_REKEY_ALLOWED_IPS"],
-                        keepalive=keepalive,
-                        timeout=args.timeout,
-                        ping_target=os.environ.get("DPI_WG_REKEY_PING") or None,
-                    )
+                v = probe_wg_handshake.probe(
+                    dns=args.dns,
+                    port=args.port,
+                    timeout=args.timeout,
+                    server_pub_b64=os.environ["DPI_WG_SERVER_PUB"],
+                    client_priv_b64=os.environ["DPI_WG_CLIENT_PRIV"],
+                    client_pub_b64=os.environ["DPI_WG_CLIENT_PUB"],
+                )
         else:
             v = Verdict(
                 code=VerdictCode.ERROR_INTERNAL,

@@ -1,6 +1,0 @@
-# /etc/sudoers.d/dpi-probe -- install only on vantages that enable wg-rekey.
-# Grants the zabbix user the minimum wg capability needed by the rekey probe.
-# This can redirect production WG tunnels; opt in deliberately and validate with:
-#   chmod 0440 /etc/sudoers.d/dpi-probe
-#   visudo -c -f /etc/sudoers.d/dpi-probe
-zabbix ALL=(root) NOPASSWD: /usr/bin/wg show *, /usr/bin/wg set *

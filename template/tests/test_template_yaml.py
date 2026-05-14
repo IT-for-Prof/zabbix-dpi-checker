@@ -82,15 +82,19 @@ def test_template_has_tspu_liveness_item(doc: dict[str, Any]) -> None:
     assert key_to_item["dpi.tspu_liveness.verdict"]["master_item"]["key"] == liveness_key
 
 
-def test_template_has_wg_rekey_item(doc: dict[str, Any]) -> None:
+def test_template_has_wg_handshake_item(doc: dict[str, Any]) -> None:
     items = doc["zabbix_export"]["templates"][0].get("items", [])
     key_to_item = {it["key"]: it for it in items}
-    wg_key = "dpi_probe[wg-rekey,wg-rekey,0,wg-rekey,wg-rekey,{$DPI.PROBE_TIMEOUT}]"
-    assert wg_key in key_to_item, f"missing wg-rekey master item; have: {list(key_to_item)}"
+    wg_key = (
+        "dpi_probe[wg-handshake,wg-handshake,51820,"
+        "wg-handshake,wg-handshake,{$DPI.PROBE_TIMEOUT}]"
+    )
+    assert wg_key in key_to_item, (
+        f"missing wg-handshake master item; have: {list(key_to_item)}"
+    )
     assert key_to_item[wg_key]["type"] == "EXTERNAL"
-    assert "dpi.wg_rekey.verdict" in key_to_item
-    assert key_to_item["dpi.wg_rekey.verdict"]["master_item"]["key"] == wg_key
-    assert "wg-rekey:0" not in wg_key
+    assert "dpi.wg_handshake.verdict" in key_to_item
+    assert key_to_item["dpi.wg_handshake.verdict"]["master_item"]["key"] == wg_key
 
 
 def test_host_level_external_items_do_not_use_params(doc: dict[str, Any]) -> None:

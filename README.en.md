@@ -34,14 +34,13 @@ runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
 | `https-bytes` | Push 32 KB after TLS handshake | `THROTTLE_DETECTED` if RST lands in the 14-34 KB window |
 | `tls-frag` | ClientHello in 4-byte TCP segments | Fragmentation bypass signal for SNI-parser DPI |
 | `tspu-liveness` | Aggregate canary-SNI probe | `TSPU_ACTIVE` flag per vantage |
-| `wg-rekey` | Forced fresh WireGuard handshake | `WG_REKEY_PASS` / `WG_REKEY_BLOCKED` |
+| `wg-handshake` | Userspace WireGuard HandshakeInit | `WG_HANDSHAKE_PASS` / `WG_HANDSHAKE_BLOCKED` |
 
-`wg-rekey` deployment requires `/usr/bin/wg`, passwordless sudo for the
-`zabbix` user via `deploy/sudoers.d/dpi-probe`, and per-peer config via
-environment variables: `DPI_WG_REKEY_IFACE`, `DPI_WG_REKEY_PEER`,
-`DPI_WG_REKEY_TEST_EP`, `DPI_WG_REKEY_ORIG_EP`, `DPI_WG_REKEY_ALLOWED_IPS`,
-`DPI_WG_REKEY_KEEPALIVE` (optional, default `25`), and
-`DPI_WG_REKEY_PING` (optional AllowedIPs target to force traffic).
+`wg-handshake` requires no kernel WireGuard and no sudo. Configure via
+environment variables: `DPI_WG_SERVER_PUB` (server's public key, base64),
+`DPI_WG_CLIENT_PRIV` (vantage client private key, base64, use Zabbix Secret macro),
+and `DPI_WG_CLIENT_PUB` (vantage client public key, base64). Register
+the client public key as a `[Peer]` block on the WireGuard server side.
 
 `tspu-liveness` canary SNIs are configurable via
 `DPI_TSPU_LIVENESS_SNIS` (comma-separated). Default:

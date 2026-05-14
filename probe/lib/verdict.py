@@ -31,8 +31,10 @@ class VerdictCode(StrEnum):
     TSPU_ACTIVE = "TSPU_ACTIVE"  # known-blocked SNIs RST/timeout from this vantage
     TSPU_BYPASS_OK = "TSPU_BYPASS_OK"  # known-blocked SNI reachable via bypass probe
     THROTTLE_DETECTED = "THROTTLE_DETECTED"  # bytes-counter RST in expected window
-    WG_REKEY_PASS = "WG_REKEY_PASS"  # forced fresh WG handshake completed
-    WG_REKEY_BLOCKED = "WG_REKEY_BLOCKED"  # forced fresh WG handshake produced no response
+    # userspace WG HandshakeInit produced a valid HandshakeResponse
+    WG_HANDSHAKE_PASS = "WG_HANDSHAKE_PASS"
+    # no HandshakeResponse within timeout — path blocked or peer not registered
+    WG_HANDSHAKE_BLOCKED = "WG_HANDSHAKE_BLOCKED"
 
 
 class Confidence(StrEnum):
@@ -72,8 +74,8 @@ _DEFAULT_CONFIDENCE: dict[VerdictCode, Confidence] = {
     VerdictCode.TSPU_ACTIVE: Confidence.HIGH,
     VerdictCode.TSPU_BYPASS_OK: Confidence.HIGH,
     VerdictCode.THROTTLE_DETECTED: Confidence.HIGH,
-    VerdictCode.WG_REKEY_PASS: Confidence.HIGH,
-    VerdictCode.WG_REKEY_BLOCKED: Confidence.HIGH,
+    VerdictCode.WG_HANDSHAKE_PASS: Confidence.HIGH,
+    VerdictCode.WG_HANDSHAKE_BLOCKED: Confidence.HIGH,
     VerdictCode.TCP_RST_HANDSHAKE: Confidence.MEDIUM,
     VerdictCode.TLS_TIMEOUT: Confidence.MEDIUM,
     VerdictCode.BANNER_MISMATCH: Confidence.MEDIUM,

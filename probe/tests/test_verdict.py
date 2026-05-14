@@ -64,8 +64,8 @@ def test_verdict_code_is_str_enum_with_expected_values() -> None:
         "TSPU_ACTIVE",
         "TSPU_BYPASS_OK",
         "THROTTLE_DETECTED",
-        "WG_REKEY_PASS",
-        "WG_REKEY_BLOCKED",
+        "WG_HANDSHAKE_PASS",
+        "WG_HANDSHAKE_BLOCKED",
     }
     assert {c.value for c in VerdictCode} == expected
 
@@ -164,8 +164,8 @@ def test_new_verdict_codes_have_default_confidence() -> None:
         VerdictCode.TSPU_ACTIVE: Confidence.HIGH,
         VerdictCode.TSPU_BYPASS_OK: Confidence.HIGH,
         VerdictCode.THROTTLE_DETECTED: Confidence.HIGH,
-        VerdictCode.WG_REKEY_PASS: Confidence.HIGH,
-        VerdictCode.WG_REKEY_BLOCKED: Confidence.HIGH,
+        VerdictCode.WG_HANDSHAKE_PASS: Confidence.HIGH,
+        VerdictCode.WG_HANDSHAKE_BLOCKED: Confidence.HIGH,
     }
     for code, conf in expected.items():
         v = Verdict(code=code, reason="x", latency_ms=1.0)

@@ -59,7 +59,7 @@ def test_cli_help_lists_all_kinds() -> None:
         "https-bytes",
         "tls-frag",
         "tspu-liveness",
-        "wg-rekey",
+        "wg-handshake",
     ):
         assert kind in out
 
@@ -536,89 +536,57 @@ def test_cli_tspu_liveness_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> N
     assert calls[0]["timeout"] == 30.0
 
 
-def test_cli_wg_rekey_kind_reads_env_config(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_wg_handshake_kind_reads_env_keypair(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CLI plumbs server_pub / client_priv / client_pub via env vars."""
     from probe import dpi_probe
-    from probe.lib import probe_wg_rekey
+    from probe.lib import probe_wg_handshake
     from probe.lib.verdict import Verdict, VerdictCode
 
     calls: list[dict[str, object]] = []
 
-    def fake_probe(**kwargs: object) -> Verdict:
-        calls.append(kwargs)
-        return Verdict(VerdictCode.WG_REKEY_PASS, "stub", 1.0)
+    def _fake_wg_probe(**kw: object) -> Verdict:
+        calls.append(kw)
+        return Verdict(VerdictCode.WG_HANDSHAKE_PASS, "stub", 1.0)
 
-    monkeypatch.setattr(probe_wg_rekey, "probe", fake_probe)
-    monkeypatch.setenv("DPI_WG_REKEY_IFACE", "wg_ifp")
-    monkeypatch.setenv("DPI_WG_REKEY_PEER", "PEERPUB=")
-    monkeypatch.setenv("DPI_WG_REKEY_TEST_EP", "65.21.40.204:5599")
-    monkeypatch.setenv("DPI_WG_REKEY_ORIG_EP", "127.0.0.1:5599")
-    monkeypatch.setenv("DPI_WG_REKEY_ALLOWED_IPS", "192.168.255.1/32")
-    monkeypatch.setenv("DPI_WG_REKEY_KEEPALIVE", "25")
-    monkeypatch.setenv("DPI_WG_REKEY_PING", "192.168.255.1")
+    monkeypatch.setattr(probe_wg_handshake, "probe", _fake_wg_probe)
+    monkeypatch.setenv("DPI_WG_SERVER_PUB", "U0VSVkVSUFVCS0VZQUFBQUFBQUFBQUFBQUFBQUFBQUE=")
+    monkeypatch.setenv("DPI_WG_CLIENT_PRIV", "Q0xJRU5UUFJJVktFWUFBQUFBQUFBQUFBQUFBQUFBQUE=")
+    monkeypatch.setenv("DPI_WG_CLIENT_PUB",  "Q0xJRU5UUFVCS0VZQUFBQUFBQUFBQUFBQUFBQUFBQUE=")
     monkeypatch.setattr(
         "sys.argv",
-        ["dpi_probe", "wg-rekey", "wg-rekey", "0", "wg-rekey", "wg-rekey", "10"],
+        ["dpi_probe", "65.21.40.204", "wg-handshake", "51820",
+         "65.21.40.204", "", "10"],
     )
     with pytest.raises(SystemExit) as exc:
         dpi_probe.main()
     assert exc.value.code == 0
     assert calls
     call = calls[0]
-    assert call["iface"] == "wg_ifp"
-    assert call["peer_pubkey"] == "PEERPUB="
-    assert call["test_endpoint"] == "65.21.40.204:5599"
-    assert call["orig_endpoint"] == "127.0.0.1:5599"
-    assert call["ping_target"] == "192.168.255.1"
+    assert call["dns"] == "65.21.40.204"
+    assert call["port"] == 51820
+    assert call["server_pub_b64"] == "U0VSVkVSUFVCS0VZQUFBQUFBQUFBQUFBQUFBQUFBQUE="
 
 
-def test_cli_wg_rekey_missing_env_emits_internal_error(
+def test_cli_wg_handshake_missing_env_emits_internal_error(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from probe import dpi_probe
 
-    for key in (
-        "DPI_WG_REKEY_IFACE",
-        "DPI_WG_REKEY_PEER",
-        "DPI_WG_REKEY_TEST_EP",
-        "DPI_WG_REKEY_ORIG_EP",
-        "DPI_WG_REKEY_ALLOWED_IPS",
-    ):
-        monkeypatch.delenv(key, raising=False)
+    for k in ("DPI_WG_SERVER_PUB", "DPI_WG_CLIENT_PRIV", "DPI_WG_CLIENT_PUB"):
+        monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(
         "sys.argv",
-        ["dpi_probe", "65.21.40.204", "wg-rekey", "5599", "65.21.40.204", "", "10"],
+        ["dpi_probe", "65.21.40.204", "wg-handshake", "51820",
+         "65.21.40.204", "", "10"],
     )
     with pytest.raises(SystemExit) as exc:
         dpi_probe.main()
     assert exc.value.code == 0
-    payload = json.loads(capsys.readouterr().out.strip())
+    out = capsys.readouterr().out.strip()
+    payload = json.loads(out)
     assert payload["verdict"] == "ERROR_INTERNAL"
-    assert "DPI_WG_REKEY_" in payload["reason"]
-
-
-def test_cli_wg_rekey_invalid_keepalive_emits_internal_error(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from probe import dpi_probe
-
-    monkeypatch.setenv("DPI_WG_REKEY_IFACE", "wg_ifp")
-    monkeypatch.setenv("DPI_WG_REKEY_PEER", "PEERPUB=")
-    monkeypatch.setenv("DPI_WG_REKEY_TEST_EP", "65.21.40.204:5599")
-    monkeypatch.setenv("DPI_WG_REKEY_ORIG_EP", "127.0.0.1:5599")
-    monkeypatch.setenv("DPI_WG_REKEY_ALLOWED_IPS", "192.168.255.1/32")
-    monkeypatch.setenv("DPI_WG_REKEY_KEEPALIVE", "not-an-int")
-    monkeypatch.setattr(
-        "sys.argv",
-        ["dpi_probe", "wg-rekey", "wg-rekey", "0", "wg-rekey", "wg-rekey", "10"],
-    )
-    with pytest.raises(SystemExit) as exc:
-        dpi_probe.main()
-    assert exc.value.code == 0
-    payload = json.loads(capsys.readouterr().out.strip())
-    assert payload["verdict"] == "ERROR_INTERNAL"
-    assert "DPI_WG_REKEY_KEEPALIVE" in payload["reason"]
+    assert "DPI_WG_" in payload["reason"]
 
 
 def test_cli_wireguard_passes_pubkey_via_cert_fp_slot(
