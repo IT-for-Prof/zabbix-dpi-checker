@@ -43,9 +43,7 @@ def _make_self_signed_cert(tmp_path: Path) -> tuple[Path, Path]:
     return cert, key
 
 
-def _tls_echo_server(
-    sock: socket.socket, ctx: ssl.SSLContext, rst_after_bytes: int | None
-) -> None:
+def _tls_echo_server(sock: socket.socket, ctx: ssl.SSLContext, rst_after_bytes: int | None) -> None:
     try:
         raw, _ = sock.accept()
     except OSError:
