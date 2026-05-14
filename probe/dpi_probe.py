@@ -291,6 +291,7 @@ def main() -> NoReturn:
             required = (
                 "DPI_WG_REKEY_IFACE",
                 "DPI_WG_REKEY_PEER",
+                "DPI_WG_REKEY_TEST_EP",
                 "DPI_WG_REKEY_ORIG_EP",
                 "DPI_WG_REKEY_ALLOWED_IPS",
             )
@@ -304,18 +305,23 @@ def main() -> NoReturn:
             else:
                 try:
                     keepalive = int(os.environ.get("DPI_WG_REKEY_KEEPALIVE", "25"))
-                except ValueError:
-                    keepalive = 25
-                v = probe_wg_rekey.probe(
-                    iface=os.environ["DPI_WG_REKEY_IFACE"],
-                    peer_pubkey=os.environ["DPI_WG_REKEY_PEER"],
-                    test_endpoint=f"{args.dns}:{args.port}",
-                    orig_endpoint=os.environ["DPI_WG_REKEY_ORIG_EP"],
-                    allowed_ips=os.environ["DPI_WG_REKEY_ALLOWED_IPS"],
-                    keepalive=keepalive,
-                    timeout=args.timeout,
-                    ping_target=os.environ.get("DPI_WG_REKEY_PING") or None,
-                )
+                except ValueError as e:
+                    v = Verdict(
+                        code=VerdictCode.ERROR_INTERNAL,
+                        reason=f"wg-rekey: invalid DPI_WG_REKEY_KEEPALIVE: {e}",
+                        latency_ms=0.0,
+                    )
+                else:
+                    v = probe_wg_rekey.probe(
+                        iface=os.environ["DPI_WG_REKEY_IFACE"],
+                        peer_pubkey=os.environ["DPI_WG_REKEY_PEER"],
+                        test_endpoint=os.environ["DPI_WG_REKEY_TEST_EP"],
+                        orig_endpoint=os.environ["DPI_WG_REKEY_ORIG_EP"],
+                        allowed_ips=os.environ["DPI_WG_REKEY_ALLOWED_IPS"],
+                        keepalive=keepalive,
+                        timeout=args.timeout,
+                        ping_target=os.environ.get("DPI_WG_REKEY_PING") or None,
+                    )
         elif args.kind == "quic":
             from probe.lib import probe_quic
 

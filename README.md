@@ -382,7 +382,7 @@ ground truth для «работает / не работает».
 `wg-rekey` deployment requires `/usr/bin/wg`, passwordless sudo for the
 `zabbix` user via `deploy/sudoers.d/dpi-probe`, and per-peer config via
 environment variables: `DPI_WG_REKEY_IFACE`, `DPI_WG_REKEY_PEER`,
-`DPI_WG_REKEY_ORIG_EP`, `DPI_WG_REKEY_ALLOWED_IPS`,
+`DPI_WG_REKEY_TEST_EP`, `DPI_WG_REKEY_ORIG_EP`, `DPI_WG_REKEY_ALLOWED_IPS`,
 `DPI_WG_REKEY_KEEPALIVE` (optional, default `25`), and
 `DPI_WG_REKEY_PING` (optional AllowedIPs target to force traffic).
 
@@ -550,6 +550,7 @@ proxy-машины) — отдельный пользователь только
 | `{$DPI.PROBE_TIMEOUT}` | `10` | Если сеть с vantage медленнее обычной |
 | `{$DPI.NODATA_WINDOW}` | `1h` | Окно для stale-data trigger; уменьшать только если нужен более быстрый сигнал «probe умер» |
 | `{$DPI.CERT_FINGERPRINT}` | пусто | На target host, если нужно pin'ить HTTPS/SMTPS leaf certificate SHA-256 |
+| `{$DPI.WG.PUBKEY}` | пусто | На WireGuard target host: публичный ключ peer; LLD передаёт его в последний positional slot вместо cert fingerprint для `wireguard` |
 | `{$DPI.SELF_TARGETS}` | `^$` | На vantage, который сам же хостит часть DPI Targets (NAT hairpinning), см. ниже |
 | `{$DPI.EXCLUDE_KINDS}` | `^$` | На vantage, чей ISP фильтрует целые kinds outbound (типично `^(smtp|smtps)$` для RU/CIS), см. ниже |
 
@@ -871,9 +872,10 @@ dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP
   не `--key=value`. Сам скрипт принимает позиционные аргументы через argparse.
 - **Макросы раскрываются на этапе вызова.** `{$DPI.PROBE_TIMEOUT}` подставляется
   числом до запуска скрипта. Fallback в коде не нужен (но default в шаблоне есть — `10`).
-- **`{#CERT_FP}` берётся из target macro `{$DPI.CERT_FINGERPRINT}`.** Пустое
-  значение отключает cert pinning; непустое значение сравнивается с SHA-256
-  leaf certificate для HTTPS/SMTPS.
+- **`{#CERT_FP}` берётся из target macro `{$DPI.CERT_FINGERPRINT}`**, кроме
+  `wireguard`: для него LLD берёт `{$DPI.WG.PUBKEY}` и передаёт публичный ключ
+  в тот же последний positional slot. Пустое значение отключает cert pinning /
+  pubkey-aware WG mode.
 - **`--with-control` перед target probe запускает neutral outbound check.**
   Настраивается переменными окружения prober'а `DPI_CONTROL_HOST`,
   `DPI_CONTROL_PORT`, `DPI_CONTROL_TIMEOUT`. Для отдельного health item

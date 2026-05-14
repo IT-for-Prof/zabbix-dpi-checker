@@ -207,3 +207,29 @@ def test_bytes_counter_ssl_error_in_window_is_not_throttle(
     )
     assert v.code == VerdictCode.TCP_RST_MID_STREAM
     assert "not a confirmed TCP RST" in v.reason
+
+
+def test_send_and_probe_restores_socket_timeout() -> None:
+    class FakeTLS:
+        def __init__(self) -> None:
+            self.timeout: float | None = 7.0
+
+        def sendall(self, payload: bytes) -> None:
+            pass
+
+        def gettimeout(self) -> float | None:
+            return self.timeout
+
+        def setblocking(self, flag: bool) -> None:
+            self.timeout = None if flag else 0.0
+
+        def settimeout(self, timeout: float | None) -> None:
+            self.timeout = timeout
+
+        def recv(self, size: int) -> bytes:
+            raise BlockingIOError
+
+    tls = FakeTLS()
+    cumulative = probe_https_bytes._send_and_probe(tls, b"abc", 10)  # type: ignore[arg-type]
+    assert cumulative == 13
+    assert tls.timeout == 7.0

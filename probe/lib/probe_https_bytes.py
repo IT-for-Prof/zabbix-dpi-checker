@@ -111,13 +111,14 @@ def _send_and_probe(tls: ssl.SSLSocket, payload: bytes, cumulative: int) -> int:
     tls.sendall(payload)
     cumulative += len(payload)
     time.sleep(0.001)
+    previous_timeout = tls.gettimeout()
     tls.setblocking(False)
     try:
         tls.recv(4096)
     except (BlockingIOError, ssl.SSLWantReadError):
         pass
     finally:
-        tls.setblocking(True)
+        tls.settimeout(previous_timeout)
     return cumulative
 
 

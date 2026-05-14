@@ -90,6 +90,7 @@ def test_template_has_wg_rekey_item(doc: dict[str, Any]) -> None:
     assert key_to_item[wg_key]["type"] == "EXTERNAL"
     assert "dpi.wg_rekey.verdict" in key_to_item
     assert key_to_item["dpi.wg_rekey.verdict"]["master_item"]["key"] == wg_key
+    assert "wg-rekey:0" not in wg_key
 
 
 def test_host_level_external_items_do_not_use_params(doc: dict[str, Any]) -> None:
@@ -98,6 +99,13 @@ def test_host_level_external_items_do_not_use_params(doc: dict[str, Any]) -> Non
         item["key"] for item in items if item.get("type") == "EXTERNAL" and "params" in item
     ]
     assert offenders == [], f"EXTERNAL host items must encode args in key, not params: {offenders}"
+
+
+def test_lld_uses_wireguard_pubkey_macro_for_wireguard_rows(doc: dict[str, Any]) -> None:
+    lld = doc["zabbix_export"]["templates"][0]["discovery_rules"][0]
+    script = lld["preprocessing"][0]["parameters"][0]
+    assert "{$DPI.WG.PUBKEY}" in script
+    assert 'kind === "wireguard" ? wgPubkey : certFp' in script
 
 
 def test_template_has_tspu_active_trigger(doc: dict[str, Any]) -> None:

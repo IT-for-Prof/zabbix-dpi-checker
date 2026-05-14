@@ -49,7 +49,7 @@ zabbix_export:
             Queries the Zabbix API for all hosts visible to the vantage's API token
             (scoped to hostgroup "DPI Targets" by the dpi-vantage role/group ACL),
             reads their {$DPI.DNS}, {$DPI.REGION}, {$DPI.KINDS}, {$DPI.SNI},
-            {$DPI.CERT_FINGERPRINT} macros,
+            {$DPI.CERT_FINGERPRINT} / {$DPI.WG.PUBKEY} macros,
             and expands the comma-separated {$DPI.KINDS} list into one LLD record
             per (host, kind, port) tuple.
             
@@ -224,6 +224,7 @@ zabbix_export:
                     var region = macros["{$DPI.REGION}"] || "";
                     var sni = macros["{$DPI.SNI}"] || dns;
                     var certFp = macros["{$DPI.CERT_FINGERPRINT}"] || "";
+                    var wgPubkey = macros["{$DPI.WG.PUBKEY}"] || "";
                     var kinds = macros["{$DPI.KINDS}"] || "";
                     var parts = kinds.split(",");
                     for (var k = 0; k < parts.length; k++) {
@@ -241,7 +242,7 @@ zabbix_export:
                         "{#KIND}": kind,
                         "{#PORT}": port,
                         "{#SNI}": sni,
-                        "{#CERT_FP}": certFp
+                        "{#CERT_FP}": (kind === "wireguard" ? wgPubkey : certFp)
                       });
                     }
                   }
@@ -372,7 +373,7 @@ zabbix_export:
             you've measured impact.
         - macro: '{$DPI.CERT_FINGERPRINT}'
           value: ''
-          description: 'Optional expected leaf certificate SHA-256 fingerprint for HTTPS/SMTPS targets. Leave empty to disable certificate pinning; override on target hosts that need MITM/cert-substitution detection.'
+          description: 'Optional expected leaf certificate SHA-256 fingerprint for HTTPS/SMTPS targets. Leave empty to disable certificate pinning; override on target hosts that need MITM/cert-substitution detection. WireGuard uses target macro {$DPI.WG.PUBKEY} instead.'
         - macro: '{$DPI.NODATA_WINDOW}'
           value: 1h
           description: 'Window for the stale-data trigger. If a verdict item has not produced a value in this long, the stale-data trigger fires (Information severity) and SUPPRESSES the directional-block trigger via dependency — a dead probe must not produce false DPI alerts. Default 1h = 12 missed probe cycles at default 5m interval.'

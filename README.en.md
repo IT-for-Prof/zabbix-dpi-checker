@@ -40,7 +40,7 @@ runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
 `wg-rekey` deployment requires `/usr/bin/wg`, passwordless sudo for the
 `zabbix` user via `deploy/sudoers.d/dpi-probe`, and per-peer config via
 environment variables: `DPI_WG_REKEY_IFACE`, `DPI_WG_REKEY_PEER`,
-`DPI_WG_REKEY_ORIG_EP`, `DPI_WG_REKEY_ALLOWED_IPS`,
+`DPI_WG_REKEY_TEST_EP`, `DPI_WG_REKEY_ORIG_EP`, `DPI_WG_REKEY_ALLOWED_IPS`,
 `DPI_WG_REKEY_KEEPALIVE` (optional, default `25`), and
 `DPI_WG_REKEY_PING` (optional AllowedIPs target to force traffic).
 
