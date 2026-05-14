@@ -315,7 +315,7 @@ zabbix_export:
                 - $.verdict
           master_item:
             key: 'dpi_probe[vantage-self,tspu-liveness,0,vantage-self,vantage-self,30]'
-        - uuid: e1c8f0d300004003cd30e6f3cdef0003
+        - uuid: e06cbfdb32934edebb0c9def244c087a
           name: 'DPI WG handshake (vantage-level)'
           type: EXTERNAL
           key: 'dpi_probe[wg-handshake,wg-handshake,51820,wg-handshake,wg-handshake,{$DPI.PROBE_TIMEOUT}]'
@@ -327,7 +327,7 @@ zabbix_export:
             Userspace WireGuard HandshakeInit probe. Requires DPI_WG_SERVER_PUB,
             DPI_WG_CLIENT_PRIV, and DPI_WG_CLIENT_PUB environment variables on
             the prober host. No kernel WireGuard or sudo required.
-        - uuid: e1c8f0d300004004de40f704def00004
+        - uuid: 736eec1177724400b4124dbe67d2d522
           name: 'DPI WG handshake verdict'
           type: DEPENDENT
           key: dpi.wg_handshake.verdict
@@ -395,22 +395,6 @@ zabbix_export:
         - macro: '{$DPI.SELF_TARGETS}'
           value: ^$
           description: 'Regex matching DPI target hostnames that this vantage should NOT probe — used to exclude services hosted ON the vantage''s own machine (NAT hairpinning artifacts) or aliased via local /etc/hosts. Default `^$` matches only the empty string, so it filters nothing. Override per-vantage with a regex alternation like `^(mail\.example\.com|relay\.example\.com)$` to skip self-hosted targets from that vantage.'
-      triggers:
-        - uuid: f2d9e1d400005001cd31e6f3cdef0001
-          name: 'TSPU active on this vantage ({HOST.NAME})'
-          expression: 'last(/DPI Mesh Blocking Detection/dpi.tspu_liveness.verdict)="TSPU_ACTIVE"'
-          recovery_mode: NORMAL
-          priority: INFO
-          description: |
-            At least two canary SNIs returned blocking signatures from this
-            vantage. This is diagnostic state for interpreting target probe
-            results, not a user-facing outage alert.
-          manual_close: 'NO'
-          tags:
-            - tag: class
-              value: network
-            - tag: component
-              value: tspu
       valuemaps:
         - uuid: c3e70d1759b844bfa5257c9f80eefcb8
           name: 'DPI verdict'
@@ -457,3 +441,18 @@ zabbix_export:
               newvalue: 'WG userspace HandshakeInit succeeded'
             - value: WG_HANDSHAKE_BLOCKED
               newvalue: 'WG userspace HandshakeInit blocked / no response'
+  triggers:
+    - uuid: fe218d344ecf4e81b78ea8a05dfdd34f
+      name: 'TSPU active on this vantage ({HOST.NAME})'
+      expression: 'last(/DPI Mesh Blocking Detection/dpi.tspu_liveness.verdict)="TSPU_ACTIVE"'
+      priority: INFO
+      description: |
+        At least two canary SNIs returned blocking signatures from this
+        vantage. This is diagnostic state for interpreting target probe
+        results, not a user-facing outage alert.
+      manual_close: 'NO'
+      tags:
+        - tag: class
+          value: network
+        - tag: component
+          value: tspu

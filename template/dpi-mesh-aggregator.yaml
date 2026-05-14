@@ -80,6 +80,14 @@ zabbix_export:
                     
                     SUPPRESSES the 4 directional-block tiers via dependency: a frozen aggregator must not produce false consensus alerts.
                   manual_close: 'YES'
+            - uuid: 92c7f12c7ca84194bf51646ed606ac56
+              name: 'DPI discriminator present [{#TARGET}] [{#KIND}]:{#PORT}'
+              type: CALCULATED
+              key: 'dpi.discriminator_any[{#TARGET},{#KIND},{#PORT}]'
+              delay: '{$DPI.INTERVAL}'
+              history: 30d
+              params: 'count(last_foreach(/*/dpi.discriminator[{#TARGET},{#KIND},{#PORT}]),"regexp",".")'
+              description: 'Count of vantages that emitted a non-empty block-location discriminator for this tuple. Operator context only; severity still comes from verdict consensus.'
             - uuid: 49668ae20af840989af1aaa99c9fd2fd
               name: 'DPI vantages reporting [{#TARGET}] [{#KIND}]:{#PORT}'
               type: CALCULATED
