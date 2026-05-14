@@ -490,3 +490,34 @@ def test_cli_tls_frag_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
     assert exc.value.code == 0
     assert calls
     assert calls[0]["sni"] == "rutracker.org"
+
+
+def test_cli_tspu_liveness_kind_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
+    from probe import dpi_probe
+    from probe.lib import probe_tspu_liveness
+    from probe.lib.verdict import Verdict, VerdictCode
+
+    calls: list[dict[str, object]] = []
+
+    def fake_probe(**kwargs: object) -> Verdict:
+        calls.append(kwargs)
+        return Verdict(code=VerdictCode.OK, reason="stub", latency_ms=1.0)
+
+    monkeypatch.setattr(probe_tspu_liveness, "probe", fake_probe)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dpi_probe",
+            "vantage-self",
+            "tspu-liveness",
+            "0",
+            "vantage-self",
+            "vantage-self",
+            "30",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        dpi_probe.main()
+    assert exc.value.code == 0
+    assert calls
+    assert calls[0]["timeout"] == 30.0

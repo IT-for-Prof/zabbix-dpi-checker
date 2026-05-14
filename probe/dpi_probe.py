@@ -52,6 +52,7 @@ KINDS = (
     "openvpn",
     "https-bytes",
     "tls-frag",
+    "tspu-liveness",
 )
 
 
@@ -173,7 +174,7 @@ def main() -> NoReturn:
             )
         )
 
-    if not all([args.target, args.kind, args.port, args.dns]):
+    if args.target is None or args.kind is None or args.port is None or args.dns is None:
         parser.error("target, kind, port, dns are required unless --control-only is set")
 
     try:
@@ -277,6 +278,10 @@ def main() -> NoReturn:
                 sni=args.sni or args.dns,
                 timeout=args.timeout,
             )
+        elif args.kind == "tspu-liveness":
+            from probe.lib import probe_tspu_liveness
+
+            v = probe_tspu_liveness.probe(timeout=args.timeout)
         else:
             v = Verdict(
                 code=VerdictCode.ERROR_INTERNAL,
