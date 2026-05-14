@@ -31,7 +31,7 @@ runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
 
 | Kind | Purpose | TSPU signature it catches |
 |---|---|---|
-| `https-bytes` | Push 32 KB after TLS handshake | `THROTTLE_DETECTED` if RST lands in the 14-34 KB window |
+| `https-bytes` | Push 64 KB after TLS handshake (interleaved write+read) | `THROTTLE_DETECTED` if RST lands in the 14-34 KB window |
 | `tls-frag` | ClientHello in 4-byte TCP segments | Fragmentation bypass signal for SNI-parser DPI |
 | `tspu-liveness` | Aggregate canary-SNI probe | `TSPU_ACTIVE` flag per vantage |
 | `wg-handshake` | Userspace WireGuard HandshakeInit | `WG_HANDSHAKE_PASS` / `WG_HANDSHAKE_BLOCKED` |
@@ -123,8 +123,10 @@ aggregator itself freezes.
 ## Verdict codes
 
 `OK`, `TCP_RST_HANDSHAKE`, `TCP_RST_MID_STREAM`, `TLS_RESET_POST_HELLO`,
-`TLS_TIMEOUT`, `CERT_MISMATCH`, `BANNER_MISMATCH`, `DNS_LIE`, `HTTP_STUB`,
-`ROUTE_BLACKHOLE`, `PORT_FILTERED`, `REMOTE_DOWN`, `UDP_BLIND`,
+`TLS_TIMEOUT`, `CERT_MISMATCH`, `BANNER_MISMATCH`, `REMOTE_HUNGUP_AFTER_CONNECT`,
+`VANTAGE_UNAVAILABLE`, `DNS_LIE`, `HTTP_STUB`, `ROUTE_BLACKHOLE`,
+`PORT_FILTERED`, `REMOTE_DOWN`, `UDP_BLIND`, `TSPU_ACTIVE`, `TSPU_BYPASS_OK`,
+`THROTTLE_DETECTED`, `WG_HANDSHAKE_PASS`, `WG_HANDSHAKE_BLOCKED`,
 `ERROR_INTERNAL` — see Russian README for descriptions and typical causes.
 
 Each JSON also carries a `confidence` field (`HIGH` / `MEDIUM` / `LOW`)
@@ -134,11 +136,67 @@ derived from the verdict code, useful for routing alerts.
 
 ```bash
 python3.11 -m venv .venv-dev && source .venv-dev/bin/activate
-pip install pytest ruff mypy pyyaml
+pip install pytest ruff mypy pyyaml cryptography
 pytest -q && ruff check probe template && mypy --strict probe/lib probe/dpi_probe.py
 ```
 
 CI runs the same on every push (see `.github/workflows/ci.yml`).
+
+## Roadmap / Detection gaps
+
+After the 2026-05-14 real-environment test session (probes deployed to
+all 5 vantages, cross-vantage matrix against rutracker / linkedin /
+mullvad.net / 65.21.40.204), 8 blocking classes are NOT yet caught by
+the current probe stack, ordered by priority:
+
+| Gap | Why current probes miss it | Closing design |
+|---|---|---|
+| **Volume-threshold throttle** (first N MB clean, then drop) | `https-bytes` pushes 64 KB max | New `wg-throughput` kind pumping N MB, slope-detect rate cliff |
+| **Long-flow heuristic** (flow active > N min triggers DPI) | Probes are stateless single-shot | Persistent-agent mode (architectural — deferred) |
+| **Sustained-throughput slowdown** (gradual rate decay) | Probes don't measure rate over time | Covered by `wg-throughput` |
+| **Time-of-day rules** (operator schedule-based DPI) | Single snapshot per cycle | 5-min cadence + Grafana aggregation over 24h |
+| **Real VPN packet-shape fingerprinting** (size/timing distribution) | Canonical handshake bytes ≠ realistic VPN traffic | Out of scope — replay-driven probe |
+| **QUIC blocking** | QUIC kind descoped — crude Initial without RFC 9001 header protection | Future plan with `cryptography` + proper header protection |
+| **End-to-end OpenVPN session** (HARD_RESET ≠ TLS done) | First-packet only | New `ovpn-tls-full` kind |
+| **Asymmetric path differences** (outbound clean, inbound dropped) | Peer-firewall artifacts mask signal | Echo-server on known endpoint + `wg-data-plane` kind |
+
+### What the current stack DOES catch (validated 2026-05-14)
+
+- ✅ Registry-level IP/domain blocks: `TLS_TIMEOUT` from RU vantages on
+  `mullvad.net` / `nordvpn.com` / `protonvpn.com` (vs EU 141 ms)
+- ✅ SNI-rule TLS blocks: `TLS_RESET_POST_HELLO` / `TLS_TIMEOUT` on
+  `rutracker.org` / `linkedin.com` / `x.com` from RU vantages
+- ✅ DNS poisoning via DoH-divergence (`DNS_LIE`)
+- ✅ Fragmented-ClientHello bypass (`TSPU_BYPASS_OK`) — caught on 4 of 5
+  vantages; one operator catches the fragmentation itself (60%
+  probabilistic drop on burst tests)
+- ✅ TSPU bytes-counter signature (`THROTTLE_DETECTED`) — methodology
+  validated against hyperion-cs (`DPI_THR_BYTES = 64 * 1024`) and
+  Runnin4ik (`chunks_count = 16, chunk_size = 4000`)
+- ✅ Real WireGuard handshake reachability (`WG_HANDSHAKE_PASS / BLOCKED`)
+  — cryptographically validated against WireGuard whitepaper §5.4
+  byte-for-byte; round-trip server-side decryption test recovers
+  `client_pub` from `encrypted_static`
+- ✅ Cross-vantage variance via mesh quorum
+- ✅ Per-vantage TSPU-liveness flag — separates "DPI off today" from
+  "no DPI on this destination"
+
+### Notable real-environment findings (2026-05-14)
+
+1. **TSPU enforcement is intermittent**. Same canary SNIs from the same
+   RU vantage flipped from all-blocked (morning) to all-OK (afternoon)
+   within hours. Probes correctly report the current state.
+2. **VPN-provider domains are firmly blocked from RU**. `mullvad.net` /
+   `nordvpn.com` / `protonvpn.com` show 8+ second TLS timeouts from RU
+   while responding in 141 ms from EU.
+3. **Per-operator variance is real**. Same SNI blocked on one RU
+   operator but reachable on another. Mesh quorum handles this.
+4. **Own infrastructure on Hetzner Helsinki passes**. 3 MB sustained
+   outbound from RU vantage flowed cleanly — TSPU is destination-list-
+   driven; non-VPN-provider ASN + non-default port + not on RKN registry
+   = passes.
+
+---
 
 ## Credits
 

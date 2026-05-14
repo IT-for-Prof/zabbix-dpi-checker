@@ -280,6 +280,11 @@ dpi-checker/
 | `PORT_FILTERED` | Таймаут TCP-подключения, без RST | «Тихая» блокировка, пакеты дропаются |
 | `REMOTE_DOWN` | Connection refused | Сервис не запущен (не блокировка) |
 | `UDP_BLIND` | UDP-зонд не смог классифицировать | Нет ответа на WireGuard/OpenVPN пакеты |
+| `TSPU_ACTIVE` | ≥ quorum канареечных SNI заблокированы из этого vantage | TSPU/регулятор включён на пути |
+| `TSPU_BYPASS_OK` | Fragmented ClientHello прошёл TLS-handshake к SNI, который из обычного `https` падает | DPI живёт в in-line парсере, не на destination |
+| `THROTTLE_DETECTED` | TCP RST в окне 14-34 KB после TLS handshake | TSPU bytes-counter throttle (Twitter-style) |
+| `WG_HANDSHAKE_PASS` | Userspace WG HandshakeInit получил валидный 92-байтовый HandshakeResponse | Путь полностью открыт, тестовый peer зарегистрирован на сервере |
+| `WG_HANDSHAKE_BLOCKED` | UDP отправка успешна, но HandshakeResponse не пришёл в timeout | Либо DPI дропает, либо peer не зарегистрирован на сервере |
 | `ERROR_INTERNAL` | Сбой самого зонда | Ошибка окружения или баг зонда |
 
 Все коды зарегистрированы в value map `DPI verdict` внутри шаблона Zabbix.
@@ -373,7 +378,7 @@ ground truth для «работает / не работает».
 
 | Kind | Purpose | TSPU signature it catches |
 |---|---|---|
-| `https-bytes` | Push 32 KB after TLS handshake | `THROTTLE_DETECTED` if RST lands in the 14-34 KB window |
+| `https-bytes` | Push 64 KB after TLS handshake (interleaved write+read) | `THROTTLE_DETECTED` if RST lands in the 14-34 KB window |
 | `tls-frag` | ClientHello in 4-byte TCP segments | Fragmentation bypass signal for SNI-parser DPI |
 | `tspu-liveness` | Aggregate canary-SNI probe | `TSPU_ACTIVE` flag per vantage |
 | `wg-handshake` | Userspace WireGuard HandshakeInit | `WG_HANDSHAKE_PASS` / `WG_HANDSHAKE_BLOCKED` |
@@ -886,6 +891,60 @@ dpi_probe[{#TARGET},{#KIND},{#PORT},{#DNS},{#SNI},{$DPI.PROBE_TIMEOUT},{#CERT_FP
   `CHECK_JSON_ERROR` бесполезен (срабатывает когда поле есть, а не когда JSON битый).
 - **Скрипт всегда завершается с кодом 0.** Любой non-zero exit → Zabbix помечает
   item как NOTSUPPORTED, и dependent-элементы не получают значения.
+
+---
+
+## Roadmap / Что текущий стэк ещё не ловит
+
+После сессии 2026-05-14 (real-environment тесты + анализ источников
+hyperion-cs / Runnin4ik / Censored Planet) определены 8 классов
+блокировок, которые **наш текущий зонд НЕ ловит**. В порядке убывания
+приоритета:
+
+| Гэп | Почему текущие probe'ы пропускают | Дизайн закрытия |
+|---|---|---|
+| **Volume-threshold throttle** («первые 10 MB OK, дальше throttle») | `https-bytes` пушит максимум 64 KB; ниже типичных порогов | Новый kind `wg-throughput` / `https-volume` — пушит N MB по конфигу, ловит cliff в throughput rate |
+| **Long-flow heuristic** (флоу активен > N минут → throttle/RST) | Probe'ы stateless single-shot | Persistent-agent режим (отложен — большая архитектурная задача) |
+| **Sustained-throughput slowdown** (не RST, а постепенное замедление) | Probe'ы не измеряют rate over time | Включается тем же `wg-throughput` дизайном; slope-detection |
+| **Time-of-day rules** (operator активен по расписанию) | Единичный snapshot за цикл | Уже есть 5-min cadence; нужен Grafana-уровень aggregation over 24h |
+| **Real VPN packet-shape fingerprinting** (размер/таймминг распределения) | Canonical handshake bytes ≠ реальный VPN-трафик | Out of scope — потребовалась бы replay-driven probe |
+| **QUIC blocking** | QUIC kind descoped — crude Initial без RFC 9001 header protection | Будущий plan: cryptography lib + правильный header protection |
+| **End-to-end OpenVPN session** (HARD_RESET ≠ TLS-handshake завершён) | Probe'ы проверяют только первый packet | Новый kind `ovpn-tls-full` — завершает control-channel TLS |
+| **Asymmetric path differences** (outbound clean, inbound dropped) | Артефакты peer-firewall'а маскируют сигнал | Нужен echo-server на known endpoint + `wg-data-plane` kind |
+
+### Что мы УЖЕ ловим (на сегодня)
+
+✅ Registry-level IP/domain блокировка (TLS_TIMEOUT, TCP_RST_HANDSHAKE,
+ROUTE_BLACKHOLE) — подтверждено на mullvad.net / nordvpn / protonvpn
+из RU vantages 2026-05-14
+✅ SNI-rule TLS блокировка (`TLS_RESET_POST_HELLO`) — подтверждено на
+rutracker.org из RU vantages
+✅ DNS poisoning / DoH-divergence (`DNS_LIE`) — caught x.com Cloudflare-edge
+divergence в утреннем тесте
+✅ Fragmented-CH bypass (`TSPU_BYPASS_OK`) — подтверждено: проходит на
+4 из 5 vantages, блокируется на ifp-vps15 (специфичный RU operator)
+✅ TSPU bytes-counter в окне 14-34 KB (`THROTTLE_DETECTED`) — не сработал
+сегодня на rutracker, но методология взята из hyperion-cs / Runnin4ik
+✅ Real WG handshake reachability (`WG_HANDSHAKE_PASS/BLOCKED`) —
+cryptographically validated против WG whitepaper §5.4 byte-for-byte
+✅ Cross-vantage variance (mesh quorum) — обнаружен 60% probabilistic drop
+на fragmented-burst к rutracker из ifp-vps15
+✅ TSPU-liveness per-vantage flag — отделяет «DPI off today» от «no DPI on this destination»
+
+### Что мы УЗНАЛИ из real-environment runs
+
+1. **TSPU интермиттентный**: с 2026-05-14 утра до вечера enforcement на
+   rutracker изменился из «всегда блок» в «иногда блок» на одних и тех же
+   vantages. Probe'ы корректно отслеживают текущее состояние, не stale.
+2. **VPN-провайдеры жёстко зарегистрированы**: mullvad.net / nordvpn.com /
+   protonvpn.com заблокированы из RU vantages (TLS_TIMEOUT 8s vs EU 141ms).
+3. **Per-operator variance реальна**: один и тот же SNI блокирован на
+   ifp-vps15 (один RU оператор) и проходит на sr-vps01 (другой RU оператор).
+   Mesh-quorum-триггеры справляются с этим автоматически.
+4. **Своя инфраструктура на Hetzner не блокируется**: 3 MB sustained
+   outbound прошли чисто из ifp-vps15 → 65.21.40.204:5561. TSPU is
+   destination-list-driven; non-VPN-provider ASN + non-default port + не
+   на registry = passes.
 
 ---
 
