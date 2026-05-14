@@ -19,13 +19,13 @@ def _udp_echo(sock: socket.socket, response: bytes) -> None:
         pass
 
 
-def test_quic_no_reply_returns_port_filtered() -> None:
+def test_quic_no_reply_returns_udp_blind() -> None:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
     v = probe_quic.probe(dns="127.0.0.1", port=port, sni="example.test", timeout=0.8)
     s.close()
-    assert v.code == VerdictCode.PORT_FILTERED
+    assert v.code == VerdictCode.UDP_BLIND
 
 
 def test_quic_long_header_response_is_ok() -> None:

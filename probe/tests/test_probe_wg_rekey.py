@@ -129,3 +129,64 @@ def test_wg_rekey_restore_runs_even_if_test_fails(
     )
     restore_call = next((c for c in calls if "127.0.0.1:5599" in c), None)
     assert restore_call is not None, f"no restore call to orig endpoint found in {calls}"
+
+
+def test_wg_rekey_setup_failure_returns_internal_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pre_epoch = int(time.time()) - 60
+    scripted = [
+        mock.Mock(returncode=0, stdout=f"PEERPUB\t{pre_epoch}\n", stderr=""),
+        mock.Mock(returncode=0, stdout="", stderr=""),
+        mock.Mock(returncode=1, stdout="", stderr="bad endpoint"),
+        mock.Mock(returncode=0, stdout="", stderr=""),
+        mock.Mock(returncode=0, stdout="", stderr=""),
+    ]
+    iterator = iter(scripted)
+
+    def runner(cmd: list[str], **kwargs: object) -> mock.Mock:
+        return next(iterator)
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    v = probe_wg_rekey.probe(
+        iface="wg_ifp",
+        peer_pubkey="PEERPUB",
+        test_endpoint="65.21.40.204:5599",
+        orig_endpoint="127.0.0.1:5599",
+        allowed_ips="192.168.255.1/32",
+        keepalive=25,
+        timeout=2.0,
+        ping_target=None,
+    )
+    assert v.code == VerdictCode.ERROR_INTERNAL
+    assert "bad endpoint" in v.reason
+
+
+def test_wg_rekey_restore_failure_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    pre_epoch = int(time.time()) - 60
+    post_epoch = int(time.time())
+    scripted = [
+        mock.Mock(returncode=0, stdout=f"PEERPUB\t{pre_epoch}\n", stderr=""),
+        mock.Mock(returncode=0, stdout="", stderr=""),
+        mock.Mock(returncode=0, stdout="", stderr=""),
+        mock.Mock(returncode=0, stdout=f"PEERPUB\t{post_epoch}\n", stderr=""),
+        mock.Mock(returncode=1, stdout="", stderr="restore failed"),
+    ]
+    iterator = iter(scripted)
+
+    def runner(cmd: list[str], **kwargs: object) -> mock.Mock:
+        return next(iterator)
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    v = probe_wg_rekey.probe(
+        iface="wg_ifp",
+        peer_pubkey="PEERPUB",
+        test_endpoint="65.21.40.204:5599",
+        orig_endpoint="127.0.0.1:5599",
+        allowed_ips="192.168.255.1/32",
+        keepalive=25,
+        timeout=2.0,
+        ping_target=None,
+    )
+    assert v.code == VerdictCode.ERROR_INTERNAL
+    assert "restore failed" in v.reason

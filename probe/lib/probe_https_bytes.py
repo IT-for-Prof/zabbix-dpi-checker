@@ -81,11 +81,19 @@ def probe(
         while cumulative < push_bytes:
             n = min(len(chunk), push_bytes - cumulative)
             cumulative = _send_and_probe(tls, chunk[:n], cumulative)
-    except ConnectionResetError:
+    except (ConnectionResetError, ssl.SSLEOFError):
         rst_at = cumulative
     except (BrokenPipeError, ssl.SSLError, OSError) as e:
-        rst_at = cumulative
-        extra_reason = f"{type(e).__name__}: {e}"
+        return Verdict(
+            code=VerdictCode.TCP_RST_MID_STREAM,
+            reason=(
+                f"mid-stream failure at {cumulative}B; not a confirmed TCP RST "
+                f"({type(e).__name__}: {e})"
+            ),
+            latency_ms=(time.monotonic() - t0) * 1000.0,
+            bytes_before_fail=cumulative,
+            resolved_ip=ip,
+        )
     finally:
         with suppress(ssl.SSLError, OSError):
             tls.close()

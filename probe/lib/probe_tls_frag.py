@@ -114,8 +114,8 @@ def probe(
             sock.close()
 
     return Verdict(
-        code=VerdictCode.OK,
-        reason=f"TLS handshake completed after {fragments_sent} fragments",
+        code=VerdictCode.TSPU_BYPASS_OK,
+        reason=f"fragmented ClientHello completed after {fragments_sent} fragments",
         latency_ms=(time.monotonic() - t0) * 1000.0,
         resolved_ip=ip,
         extra={"fragments_sent": fragments_sent, "frag_size": frag_size},

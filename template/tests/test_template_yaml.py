@@ -71,12 +71,33 @@ def test_valuemap_contains_new_verdict_codes(doc: dict[str, Any]) -> None:
 def test_template_has_tspu_liveness_item(doc: dict[str, Any]) -> None:
     items = doc["zabbix_export"]["templates"][0].get("items", [])
     key_to_item = {it["key"]: it for it in items}
+    liveness_key = "dpi_probe[vantage-self,tspu-liveness,0,vantage-self,vantage-self,30]"
     assert "dpi.tspu_liveness.verdict" in key_to_item, (
         f"missing tspu-liveness verdict item; have: {list(key_to_item.keys())}"
     )
-    master = key_to_item.get("dpi_probe[tspu-liveness]")
+    master = key_to_item.get(liveness_key)
     assert master is not None, "missing master item for tspu-liveness"
     assert master["type"] == "EXTERNAL"
+    assert "params" not in master
+    assert key_to_item["dpi.tspu_liveness.verdict"]["master_item"]["key"] == liveness_key
+
+
+def test_template_has_wg_rekey_item(doc: dict[str, Any]) -> None:
+    items = doc["zabbix_export"]["templates"][0].get("items", [])
+    key_to_item = {it["key"]: it for it in items}
+    wg_key = "dpi_probe[wg-rekey,wg-rekey,0,wg-rekey,wg-rekey,{$DPI.PROBE_TIMEOUT}]"
+    assert wg_key in key_to_item, f"missing wg-rekey master item; have: {list(key_to_item)}"
+    assert key_to_item[wg_key]["type"] == "EXTERNAL"
+    assert "dpi.wg_rekey.verdict" in key_to_item
+    assert key_to_item["dpi.wg_rekey.verdict"]["master_item"]["key"] == wg_key
+
+
+def test_host_level_external_items_do_not_use_params(doc: dict[str, Any]) -> None:
+    items = doc["zabbix_export"]["templates"][0].get("items", [])
+    offenders = [
+        item["key"] for item in items if item.get("type") == "EXTERNAL" and "params" in item
+    ]
+    assert offenders == [], f"EXTERNAL host items must encode args in key, not params: {offenders}"
 
 
 def test_template_has_tspu_active_trigger(doc: dict[str, Any]) -> None:

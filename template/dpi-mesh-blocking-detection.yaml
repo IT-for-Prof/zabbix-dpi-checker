@@ -289,8 +289,7 @@ zabbix_export:
         - uuid: e1c8f0d300004001ab10c4f1abcd0001
           name: 'DPI TSPU liveness (vantage-level)'
           type: EXTERNAL
-          key: 'dpi_probe[tspu-liveness]'
-          params: 'vantage-self tspu-liveness 0 vantage-self vantage-self 30'
+          key: 'dpi_probe[vantage-self,tspu-liveness,0,vantage-self,vantage-self,30]'
           delay: '{$DPI.INTERVAL}'
           history: 30d
           value_type: TEXT
@@ -314,7 +313,35 @@ zabbix_export:
               parameters:
                 - $.verdict
           master_item:
-            key: 'dpi_probe[tspu-liveness]'
+            key: 'dpi_probe[vantage-self,tspu-liveness,0,vantage-self,vantage-self,30]'
+        - uuid: e1c8f0d300004003cd30e6f3cdef0003
+          name: 'DPI WG rekey (vantage-level)'
+          type: EXTERNAL
+          key: 'dpi_probe[wg-rekey,wg-rekey,0,wg-rekey,wg-rekey,{$DPI.PROBE_TIMEOUT}]'
+          delay: '{$DPI.INTERVAL}'
+          history: 30d
+          value_type: TEXT
+          trends: '0'
+          description: |
+            Forced fresh WireGuard handshake probe. The endpoint is configured
+            via DPI_WG_REKEY_* environment variables on the prober, so the key
+            arguments are only placeholders that satisfy the CLI shape.
+        - uuid: e1c8f0d300004004de40f704def00004
+          name: 'DPI WG rekey verdict'
+          type: DEPENDENT
+          key: dpi.wg_rekey.verdict
+          delay: '0'
+          history: 90d
+          value_type: CHAR
+          trends: '0'
+          valuemap:
+            name: 'DPI verdict'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.verdict
+          master_item:
+            key: 'dpi_probe[wg-rekey,wg-rekey,0,wg-rekey,wg-rekey,{$DPI.PROBE_TIMEOUT}]'
       tags:
         - tag: class
           value: network

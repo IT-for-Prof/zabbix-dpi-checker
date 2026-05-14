@@ -82,9 +82,11 @@ def test_frag_against_real_tls_server_completes(
         frag_size=4,
     )
     t.join(timeout=2.0)
-    assert v.code in (VerdictCode.OK, VerdictCode.TLS_TIMEOUT, VerdictCode.CERT_MISMATCH), (
-        f"unexpected {v.code}: {v.reason}"
-    )
+    assert v.code in (
+        VerdictCode.TSPU_BYPASS_OK,
+        VerdictCode.TLS_TIMEOUT,
+        VerdictCode.CERT_MISMATCH,
+    ), f"unexpected {v.code}: {v.reason}"
 
 
 def test_frag_records_fragment_count_in_extra(

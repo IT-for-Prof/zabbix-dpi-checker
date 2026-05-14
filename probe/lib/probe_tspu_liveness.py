@@ -29,7 +29,7 @@ def _resolve_snis() -> tuple[str, ...]:
 
 
 def _probe_one(sni: str, timeout: float) -> Verdict:
-    return probe_https.probe(dns=sni, port=443, sni=sni, timeout=timeout, read_body=False)
+    return probe_https.probe(dns=sni, port=443, sni=sni, timeout=timeout, read_body=True)
 
 
 def probe(

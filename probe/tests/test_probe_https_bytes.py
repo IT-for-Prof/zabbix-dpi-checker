@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from probe.lib import probe_https_bytes
+from probe.lib.resolver import DohCheckResult
 from probe.lib.verdict import VerdictCode
 
 
@@ -143,3 +144,66 @@ def test_bytes_counter_rst_outside_window_returns_generic_rst(
     )
     t.join(timeout=2.0)
     assert v.code == VerdictCode.TCP_RST_MID_STREAM, f"got {v.code}: {v.reason}"
+
+
+def test_bytes_counter_ssl_error_in_window_is_not_throttle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeSocket:
+        def settimeout(self, timeout: float) -> None:
+            pass
+
+        def connect(self, addr: tuple[str, int]) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    class FakeTLS:
+        def sendall(self, payload: bytes) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    class FakeContext:
+        check_hostname = False
+        verify_mode = ssl.CERT_NONE
+
+        def wrap_socket(
+            self,
+            raw: FakeSocket,
+            *,
+            server_hostname: str,
+            do_handshake_on_connect: bool,
+        ) -> FakeTLS:
+            return FakeTLS()
+
+    calls = 0
+
+    def fake_send_and_probe(tls: FakeTLS, payload: bytes, cumulative: int) -> int:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return 16_000
+        raise ssl.SSLError("clean tls shutdown")
+
+    monkeypatch.setattr(
+        probe_https_bytes,
+        "resolve_with_doh_check",
+        lambda dns, timeout: DohCheckResult("127.0.0.1", 0.0, frozenset(), False, None),
+    )
+    monkeypatch.setattr(socket, "socket", lambda *args, **kwargs: FakeSocket())
+    monkeypatch.setattr(ssl, "create_default_context", lambda: FakeContext())
+    monkeypatch.setattr(probe_https_bytes, "_send_and_probe", fake_send_and_probe)
+
+    v = probe_https_bytes.probe(
+        dns="127.0.0.1",
+        port=443,
+        sni="localhost",
+        timeout=5.0,
+        push_bytes=40_960,
+        expect_rst_window=(14_000, 34_000),
+    )
+    assert v.code == VerdictCode.TCP_RST_MID_STREAM
+    assert "not a confirmed TCP RST" in v.reason

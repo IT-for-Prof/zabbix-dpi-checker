@@ -56,8 +56,11 @@ def probe(*, dns: str, port: int, sni: str, timeout: float) -> Verdict:
         response, _ = sock.recvfrom(4096)
     except TimeoutError:
         return Verdict(
-            code=VerdictCode.PORT_FILTERED,
-            reason="no QUIC response within timeout",
+            code=VerdictCode.UDP_BLIND,
+            reason=(
+                "no response to Initial-shaped UDP probe; inconclusive because "
+                "stdlib probe does not construct a decryptable QUIC Initial"
+            ),
             latency_ms=(time.monotonic() - t0) * 1000.0,
             resolved_ip=ip,
         )
