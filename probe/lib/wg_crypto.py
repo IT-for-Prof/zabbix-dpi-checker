@@ -1,4 +1,9 @@
-"""WireGuard Noise IKpsk2 handshake primitives — extracted from the plan for smoke test."""
+"""WireGuard Noise IKpsk2 handshake primitives for DirectDPI probe initialization.
+
+Implements the Noise IKpsk2 initiator handshake (message 1) used by WireGuard to
+establish encrypted tunnels. Includes byte-level packet construction and MAC
+computation per RFC 7539 / WireGuard whitepaper.
+"""
 
 from __future__ import annotations
 
@@ -70,6 +75,7 @@ def _validate_key(name: str, key: bytes) -> None:
         )
 
 
+# WireGuard whitepaper §5.4 — Noise IKpsk2 initiator state machine.
 def build_handshake_init(
     server_pub: bytes,
     client_priv: bytes,
@@ -83,6 +89,15 @@ def build_handshake_init(
     _validate_key("client_pub", client_pub)
     if psk is not None:
         _validate_key("psk", psk)
+
+    # PSK mixing is not yet implemented. The protocol requires an extra HKDF
+    # step between DH2 and the timestamp encryption when psk != zeros. Raise
+    # rather than silently produce wrong packets — a future task can add it.
+    if psk is not None and psk != b"\x00" * 32:
+        raise NotImplementedError(
+            "non-zero psk not supported by build_handshake_init yet; "
+            "the IKpsk2 PSK-mixing HKDF step is unimplemented"
+        )
     if sender_index is None:
         sender_index = os.urandom(4)
     elif len(sender_index) != 4:
@@ -112,6 +127,9 @@ def build_handshake_init(
     encrypted_timestamp = _aead(k2, 0, _tai64n_now(), hi)
     hi = _hash(hi, encrypted_timestamp)
 
+    # Packet layout (§5.4): type(1) + reserved(3) + sender_index(4) + e_pub(32)
+    #                       + encrypted_static(32+16) + encrypted_timestamp(12+16)
+    #                       + mac1(16) + mac2(16) = 148 bytes total.
     msg_body = (
         bytes([0x01]) + b"\x00\x00\x00"
         + sender_index

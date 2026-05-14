@@ -1,4 +1,10 @@
-"""Smoke test for wg_crypto extracted from plan."""
+"""Tests for wg_crypto — WireGuard Noise IKpsk2 handshake builder.
+
+Includes byte-layout sanity checks plus a full round-trip: tests act as
+both initiator (via wg_crypto) and responder (via direct cryptography
+primitives) to verify the produced bytes are accepted by a correct WG
+server implementation.
+"""
 from __future__ import annotations
 
 import os
@@ -112,3 +118,29 @@ def test_handshake_response_parser_rejects_wrong_type() -> None:
 
 def test_handshake_response_parser_rejects_wrong_length() -> None:
     assert wg_crypto.is_valid_handshake_response_shape(b"\x02\x00\x00\x00" + b"\x00" * 50) is False
+
+
+def test_non_zero_psk_raises_not_implemented() -> None:
+    """Guard: non-zero psk should raise NotImplementedError, not silently misencrypt."""
+    server_priv = X25519PrivateKey.generate()
+    client_priv = X25519PrivateKey.generate()
+    with pytest.raises(NotImplementedError, match="psk"):
+        wg_crypto.build_handshake_init(
+            server_pub=_raw_pub(server_priv),
+            client_priv=_raw_priv(client_priv),
+            client_pub=_raw_pub(client_priv),
+            psk=b"\x01" * 32,  # non-zero
+        )
+
+
+def test_zero_psk_is_accepted() -> None:
+    """All-zero psk is equivalent to no psk; should succeed."""
+    server_priv = X25519PrivateKey.generate()
+    client_priv = X25519PrivateKey.generate()
+    pkt, _e, _c, _h = wg_crypto.build_handshake_init(
+        server_pub=_raw_pub(server_priv),
+        client_priv=_raw_priv(client_priv),
+        client_pub=_raw_pub(client_priv),
+        psk=b"\x00" * 32,
+    )
+    assert len(pkt) == 148
