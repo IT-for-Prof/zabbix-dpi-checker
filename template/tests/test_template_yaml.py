@@ -68,6 +68,23 @@ def test_valuemap_contains_new_verdict_codes(doc: dict[str, Any]) -> None:
     assert not missing, f"DPI verdict valuemap missing entries: {sorted(missing)}"
 
 
+def test_template_has_tspu_liveness_item(doc: dict[str, Any]) -> None:
+    items = doc["zabbix_export"]["templates"][0].get("items", [])
+    key_to_item = {it["key"]: it for it in items}
+    assert "dpi.tspu_liveness.verdict" in key_to_item, (
+        f"missing tspu-liveness verdict item; have: {list(key_to_item.keys())}"
+    )
+    master = key_to_item.get("dpi_probe[tspu-liveness]")
+    assert master is not None, "missing master item for tspu-liveness"
+    assert master["type"] == "EXTERNAL"
+
+
+def test_template_has_tspu_active_trigger(doc: dict[str, Any]) -> None:
+    triggers = doc["zabbix_export"]["templates"][0].get("triggers", [])
+    names = {trigger["name"] for trigger in triggers}
+    assert any("TSPU active" in name for name in names), f"have: {names}"
+
+
 def test_template_block_present_with_uuid_and_macros(doc: dict) -> None:  # type: ignore[type-arg]
     tpls = doc["zabbix_export"].get("templates") or []
     assert len(tpls) == 1, "expected exactly one template"

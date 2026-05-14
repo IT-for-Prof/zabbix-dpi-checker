@@ -286,6 +286,35 @@ zabbix_export:
                 - $.latency_ms
           master_item:
             key: 'dpi_probe[--control-only]'
+        - uuid: e1c8f0d300004001ab10c4f1abcd0001
+          name: 'DPI TSPU liveness (vantage-level)'
+          type: EXTERNAL
+          key: 'dpi_probe[tspu-liveness]'
+          params: 'vantage-self tspu-liveness 0 vantage-self vantage-self 30'
+          delay: '{$DPI.INTERVAL}'
+          history: 30d
+          value_type: TEXT
+          trends: '0'
+          description: |
+            Aggregate probe to known blocked SNIs from this vantage. Returns
+            TSPU_ACTIVE when at least two canaries are blocked, OK otherwise.
+            Override the SNI list via DPI_TSPU_LIVENESS_SNIS on the prober.
+        - uuid: e1c8f0d300004002bc20d5f2bcde0002
+          name: 'DPI TSPU liveness verdict'
+          type: DEPENDENT
+          key: dpi.tspu_liveness.verdict
+          delay: '0'
+          history: 90d
+          value_type: CHAR
+          trends: '0'
+          valuemap:
+            name: 'DPI verdict'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.verdict
+          master_item:
+            key: 'dpi_probe[tspu-liveness]'
       tags:
         - tag: class
           value: network
@@ -329,6 +358,22 @@ zabbix_export:
         - macro: '{$DPI.SELF_TARGETS}'
           value: ^$
           description: 'Regex matching DPI target hostnames that this vantage should NOT probe — used to exclude services hosted ON the vantage''s own machine (NAT hairpinning artifacts) or aliased via local /etc/hosts. Default `^$` matches only the empty string, so it filters nothing. Override per-vantage with a regex alternation like `^(mail\.example\.com|relay\.example\.com)$` to skip self-hosted targets from that vantage.'
+      triggers:
+        - uuid: f2d9e1d400005001cd31e6f3cdef0001
+          name: 'TSPU active on this vantage ({HOST.NAME})'
+          expression: 'last(/DPI Mesh Blocking Detection/dpi.tspu_liveness.verdict)="TSPU_ACTIVE"'
+          recovery_mode: NORMAL
+          priority: INFO
+          description: |
+            At least two canary SNIs returned blocking signatures from this
+            vantage. This is diagnostic state for interpreting target probe
+            results, not a user-facing outage alert.
+          manual_close: 'NO'
+          tags:
+            - tag: class
+              value: network
+            - tag: component
+              value: tspu
       valuemaps:
         - uuid: c3e70d1759b844bfa5257c9f80eefcb8
           name: 'DPI verdict'
