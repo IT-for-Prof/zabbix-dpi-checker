@@ -70,8 +70,8 @@ if [[ "${1:-}" == "--from-git" ]]; then
         exit 1
     fi
 
-    # shellcheck disable=SC2029  # Intentional: ${GIT_URL}/${GIT_REF} expand on client side.
     remote_install_cmd="${REMOTE_ENV_PREFIX:+${REMOTE_ENV_PREFIX} }bash -s -- --from-git ${GIT_URL} ${GIT_REF}"
+    # shellcheck disable=SC2029  # Intentional: build the remote command on the client side.
     if ssh "root@${HOST}" "${remote_install_cmd}" < "${tmp_installer}"; then
         :  # curl-pipe path worked
     else
@@ -92,11 +92,13 @@ else
         "${REPO_DIR}/" "root@${HOST}:/root/dpi-checker/"
 
     echo "[deploy-to] Running installer on ${HOST}"
+    # shellcheck disable=SC2029  # Intentional: build the remote command on the client side.
     ssh "root@${HOST}" "${REMOTE_ENV_PREFIX:+${REMOTE_ENV_PREFIX} }bash /root/dpi-checker/deploy/install-prober.sh /root/dpi-checker"
 fi
 
 echo "[deploy-to] Smoke test as zabbix user on ${HOST}"
 remote_smoke_cmd="${REMOTE_ENV_PREFIX:+${REMOTE_ENV_PREFIX} }bash -s"
+# shellcheck disable=SC2029  # Intentional: build the remote command on the client side.
 ssh "root@${HOST}" "${remote_smoke_cmd}" <<'REMOTE'
 set -euo pipefail
 
