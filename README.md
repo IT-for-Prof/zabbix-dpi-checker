@@ -89,8 +89,8 @@ flowchart TB
    на чтение hostgroup `DPI Targets`). Без `groupids` в теле — ACL фильтрует за нас.
    JS-preprocessing разворачивает `{$DPI.KINDS}` в строки `(target, kind, port)`.
 2. **Master item** `dpi_probe[…]` типа EXTERNAL — Zabbix-server/proxy вызывает
-   `/usr/lib/zabbix/externalscripts/dpi_probe` с позиционными аргументами. Скрипт всегда
-   выводит ровно один JSON и завершается с кодом 0.
+   `dpi_probe` из своего `ExternalScripts`-каталога с позиционными аргументами.
+   Скрипт всегда выводит ровно один JSON и завершается с кодом 0.
 3. **Dependent items** парсят JSON: `dpi.verdict`, `dpi.latency_ms`,
    `dpi.bytes_before_fail`, `dpi.resolved_ip`, `dpi.reason`, `dpi.discriminator`.
    Отдельный master `dpi_probe[--control-only]` даёт `dpi.control_verdict` и
@@ -707,9 +707,12 @@ sudo /tmp/dpi-checker/deploy/install-prober.sh /tmp/dpi-checker
    Принимает 3.11/3.12/3.13 — пробует в этом порядке.
 2. Создаёт venv в `/opt/dpi-probe/venv` — только stdlib, pip-пакеты не нужны.
 3. Разворачивает `probe/` в `/opt/dpi-probe/`.
-4. Создаёт симлинк `/usr/lib/zabbix/externalscripts/dpi_probe` → `/opt/dpi-probe/dpi_probe`.
-   Скрипт принимает позиционные аргументы напрямую (`target kind port dns sni timeout`)
-   и сам бутстрапит `sys.path`, так что ни обёртка, ни `PYTHONPATH` не нужны.
+4. Определяет реальный Zabbix `ExternalScripts`-каталог и создаёт там симлинк
+   `dpi_probe` → `/opt/dpi-probe/dpi_probe`. `EXTERNAL_DIR=/real/path` задаёт
+   путь явно; `ZABBIX_CONF=/custom/zabbix_server.conf` указывает нестандартный
+   конфиг для автоопределения. Скрипт принимает позиционные аргументы напрямую
+   (`target kind port dns sni timeout`) и сам бутстрапит `sys.path`, так что ни
+   обёртка, ни `PYTHONPATH` не нужны.
 5. Применяет права `root:zabbix 0750` на всё дерево (zabbix может читать, никто извне — нет).
    Применяется на каждом запуске, чтобы дрейф автоматически исправлялся.
 6. Smoke-тест от пользователя `zabbix`: `runuser -u zabbix -- dpi_probe --help`.
@@ -801,28 +804,30 @@ dpi_probe TARGET KIND PORT DNS [SNI] [TIMEOUT]
 Примеры (запускать от того же пользователя, что и Zabbix — `zabbix`):
 
 ```bash
+PROBE=/path/from/installer/log/dpi_probe
+
 # HTTPS
-runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
+runuser -u zabbix -- "$PROBE" \
     target-stub https 443 www.example.com www.example.com 10
 
 # SMTP — позиционно: target, kind, port, dns, sni (=dns если без TLS), timeout
-runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
+runuser -u zabbix -- "$PROBE" \
     target-stub smtp 25 mail.example.com mail.example.com 10
 
 # SMTPS
-runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
+runuser -u zabbix -- "$PROBE" \
     target-stub smtps 465 mail.example.com mail.example.com 10
 
 # SSH
-runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
+runuser -u zabbix -- "$PROBE" \
     target-stub ssh 22 bastion.example.com bastion.example.com 5
 
 # WireGuard — без валидного pubkey: UDP_BLIND (см. caveat ниже)
-runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
+runuser -u zabbix -- "$PROBE" \
     target-stub wireguard 51820 vpn.example.com vpn.example.com 5
 
 # OpenVPN UDP — режим зашит в зонд (по умолчанию udp)
-runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
+runuser -u zabbix -- "$PROBE" \
     target-stub openvpn 1194 vpn.example.com vpn.example.com 5
 ```
 

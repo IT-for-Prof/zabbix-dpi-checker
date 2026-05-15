@@ -21,8 +21,10 @@ per-vantage triggers used to produce.
 # Deploy the probe to a vantage host (one-shot from GitHub):
 ./deploy/deploy-to.sh <ssh-host> --from-git https://github.com/IT-for-Prof/zabbix-dpi-checker.git main
 
-# Run the probe manually for debugging (as the zabbix user):
-runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
+# Run the probe manually for debugging (as the zabbix user).
+# Use the ExternalScripts path printed by the installer.
+PROBE=/path/from/installer/log/dpi_probe
+runuser -u zabbix -- "$PROBE" \
     target-stub https 443 www.example.com www.example.com 10
 # → {"verdict":"OK","reason":"TLS handshake completed","latency_ms":253.4,...}
 ```

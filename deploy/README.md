@@ -41,8 +41,11 @@ sudo /tmp/dpi-checker/deploy/install-prober.sh /tmp/dpi-checker
    Accepts 3.11/3.12/3.13 — picks the first found.
 2. Creates `/opt/dpi-probe/venv` (stdlib only, no pip packages).
 3. Deploys `probe/` into `/opt/dpi-probe/`.
-4. Symlinks `/usr/lib/zabbix/externalscripts/dpi_probe` → `/opt/dpi-probe/dpi_probe`.
-   Script bootstraps `sys.path` internally; no wrapper, no `PYTHONPATH`.
+4. Detects the real Zabbix `ExternalScripts` directory and symlinks
+   `dpi_probe` → `/opt/dpi-probe/dpi_probe` there. Use `EXTERNAL_DIR=/real/path`
+   to override explicitly, or `ZABBIX_CONF=/custom/zabbix_server.conf` when
+   Zabbix uses a non-standard config path. Script bootstraps `sys.path`
+   internally; no wrapper, no `PYTHONPATH`.
 5. **Enforces `root:zabbix 0750` ownership on every run** — re-applied each time
    so drift gets corrected automatically.
 6. Smoke-tests as `runuser -u zabbix --` — proves the zabbix user can execute the

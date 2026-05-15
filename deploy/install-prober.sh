@@ -15,8 +15,8 @@
 #
 # Detects OS (RHEL-family vs Debian-family), installs python3.11+ if needed,
 # creates a venv at /opt/dpi-probe/venv, deploys the probe package, symlinks
-# /usr/lib/zabbix/externalscripts/dpi_probe → /opt/dpi-probe/dpi_probe, and
-# enforces root:zabbix 0750 ownership on every run.
+# dpi_probe into Zabbix's configured ExternalScripts directory, and enforces
+# root:zabbix 0750 ownership on every run.
 #
 # Every run appends to /var/log/dpi-probe/install.log for post-mortem.
 
@@ -24,7 +24,18 @@ set -euo pipefail
 
 INSTALL_DIR="/opt/dpi-probe"
 VENV_DIR="${INSTALL_DIR}/venv"
-EXT_DIR="/usr/lib/zabbix/externalscripts"
+EXT_DIR=""
+EXT_DIR_SOURCE=""
+ZABBIX_CONF_DEFAULTS=(
+    "/etc/zabbix/zabbix_server.conf"
+    "/etc/zabbix/zabbix_proxy.conf"
+)
+KNOWN_EXTERNALSCRIPT_DIRS=(
+    "/usr/lib/zabbix/externalscripts"
+    "/usr/lib64/zabbix/externalscripts"
+    "/usr/share/zabbix/externalscripts"
+    "/usr/local/share/zabbix/externalscripts"
+)
 LOG_DIR="/var/log/dpi-probe"
 LOG_FILE="${LOG_DIR}/install.log"
 
@@ -52,11 +63,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# --- Logging ----------------------------------------------------------------
-# Tee everything to a persistent log so we can audit failed installs later.
-mkdir -p "${LOG_DIR}"
-exec > >(tee -a "${LOG_FILE}") 2>&1
-
 ts() { date -u +'%Y-%m-%dT%H:%M:%SZ'; }
 log() { printf '[install-prober %s] %s\n' "$(ts)" "$*"; }
 
@@ -67,20 +73,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
-log "==== install run started ===="
-log "argv: --from-git=${FROM_GIT_URL:-<unset>} ref=${FROM_GIT_REF:-<unset>} repo_dir=${REPO_DIR:-<auto>}"
+if [[ "${INSTALL_PROBER_TESTING:-0}" != "1" ]]; then
+    # --- Logging ------------------------------------------------------------
+    # Tee everything to a persistent log so we can audit failed installs later.
+    mkdir -p "${LOG_DIR}"
+    exec > >(tee -a "${LOG_FILE}") 2>&1
 
-# --- OS detection -----------------------------------------------------------
-if [[ -f /etc/os-release ]]; then
-    # shellcheck disable=SC1091  # /etc/os-release is the standard distro probe; not a file we ship.
-    . /etc/os-release
-    OS_ID="${ID:-unknown}"
-    OS_ID_LIKE="${ID_LIKE:-}"
-else
-    log "FATAL: /etc/os-release not found"
-    exit 1
+    log "==== install run started ===="
+    log "argv: --from-git=${FROM_GIT_URL:-<unset>} ref=${FROM_GIT_REF:-<unset>} repo_dir=${REPO_DIR:-<auto>}"
+
+    # --- OS detection -------------------------------------------------------
+    if [[ -f /etc/os-release ]]; then
+        # shellcheck disable=SC1091  # /etc/os-release is the standard distro probe; not a file we ship.
+        . /etc/os-release
+        OS_ID="${ID:-unknown}"
+        OS_ID_LIKE="${ID_LIKE:-}"
+    else
+        log "FATAL: /etc/os-release not found"
+        exit 1
+    fi
+    log "OS: ${OS_ID} (id_like=${OS_ID_LIKE})"
 fi
-log "OS: ${OS_ID} (id_like=${OS_ID_LIKE})"
 
 # --- Python resolution ------------------------------------------------------
 # 3.11 preferred (matches dev), 3.12+ accepted (Ubuntu 24.04+). stdlib-only probe.
@@ -206,6 +219,83 @@ deploy_probe() {
     touch "${INSTALL_DIR}/probe/__init__.py"
 }
 
+externalscripts_from_config() {
+    local conf="$1"
+    local line trimmed value
+    while IFS= read -r line; do
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        if [[ "${trimmed}" == ExternalScripts* ]]; then
+            value="${trimmed#ExternalScripts}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            [[ "${value}" == =* ]] || continue
+            value="${value#=}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%%[[:space:]#]*}"
+            if [[ -n "${value}" ]]; then
+                printf '%s\n' "${value}"
+                return 0
+            fi
+        fi
+    done < "${conf}"
+    return 1
+}
+
+fail_externalscripts_dir() {
+    log "FATAL: could not determine Zabbix ExternalScripts directory"
+    log "       checked EXTERNAL_DIR, ZABBIX_CONF, readable default Zabbix configs, and known existing directories"
+    log "       rerun with: EXTERNAL_DIR=/real/path $0 ${REPO_DIR:-}"
+    return 1
+}
+
+accept_externalscripts_dir() {
+    local path="$1"
+    local source="$2"
+    if [[ "${path}" != /* ]]; then
+        log "FATAL: ExternalScripts directory must be an absolute path: ${path}"
+        log "       rerun with: EXTERNAL_DIR=/real/path $0 ${REPO_DIR:-}"
+        return 1
+    fi
+    EXT_DIR="${path}"
+    EXT_DIR_SOURCE="${source}"
+    log "+ externalscripts: ${EXT_DIR} from ${EXT_DIR_SOURCE}"
+    return 0
+}
+
+resolve_externalscripts_dir() {
+    local conf found_conf path
+    if [[ -n "${EXTERNAL_DIR:-}" ]]; then
+        accept_externalscripts_dir "${EXTERNAL_DIR}" "EXTERNAL_DIR"
+        return
+    fi
+
+    if [[ -n "${ZABBIX_CONF:-}" && -r "${ZABBIX_CONF}" ]]; then
+        found_conf="${ZABBIX_CONF}"
+    else
+        for conf in "${ZABBIX_CONF_DEFAULTS[@]}"; do
+            if [[ -r "${conf}" ]]; then
+                found_conf="${conf}"
+                break
+            fi
+        done
+    fi
+
+    if [[ -n "${found_conf:-}" ]]; then
+        if path="$(externalscripts_from_config "${found_conf}")"; then
+            accept_externalscripts_dir "${path}" "${found_conf}"
+            return
+        fi
+    fi
+
+    for path in "${KNOWN_EXTERNALSCRIPT_DIRS[@]}"; do
+        if [[ -d "${path}" ]]; then
+            accept_externalscripts_dir "${path}" "existing fallback directory"
+            return
+        fi
+    done
+
+    fail_externalscripts_dir
+}
+
 ensure_externalscripts_dir() {
     if [[ ! -d "${EXT_DIR}" ]]; then
         log "Creating ${EXT_DIR}"
@@ -278,6 +368,7 @@ main() {
     ensure_venv
     install_deps
     deploy_probe
+    resolve_externalscripts_dir
     ensure_externalscripts_dir
     install_externalscripts_symlink
     fix_permissions
@@ -285,4 +376,6 @@ main() {
     log "==== install run completed OK ===="
 }
 
-main "$@"
+if [[ "${INSTALL_PROBER_TESTING:-0}" != "1" ]]; then
+    main "$@"
+fi

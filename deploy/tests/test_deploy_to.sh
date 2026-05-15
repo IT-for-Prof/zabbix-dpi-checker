@@ -48,6 +48,8 @@ EOF
 chmod +x "${TMP}/ssh"
 
 # --- run deploy-to.sh with PATH overriding curl + ssh ---
+EXTERNAL_DIR="/custom external/scripts" \
+ZABBIX_CONF="/custom zabbix/zabbix_server.conf" \
 PATH="${TMP}:${PATH}" "${DEPLOY}" \
     fake-host \
     --from-git https://example.com/owner/repo.git some-ref \
@@ -65,16 +67,28 @@ if ! grep -q 'fake-installer-OK' "${TMP}/ssh-stdin.1"; then
     exit 1
 fi
 
-# --- assert ssh#1 argv: [root@fake-host, "bash -s -- --from-git URL REF"] ---
+# --- assert ssh#1 argv includes the override env and installer command. ---
 if ! grep -qx 'root@fake-host' "${TMP}/ssh-args.1"; then
     echo "FAIL: ssh#1 first arg not 'root@fake-host'"
     cat "${TMP}/ssh-args.1"
     exit 1
 fi
-if ! grep -qx 'bash -s -- --from-git https://example.com/owner/repo.git some-ref' "${TMP}/ssh-args.1"; then
+if ! grep -qx "EXTERNAL_DIR=/custom\\\\ external/scripts ZABBIX_CONF=/custom\\\\ zabbix/zabbix_server.conf bash -s -- --from-git https://example.com/owner/repo.git some-ref" "${TMP}/ssh-args.1"; then
     echo "FAIL: ssh#1 second arg wrong"
     cat "${TMP}/ssh-args.1"
     exit 1
 fi
 
-echo "PASS: deploy-to.sh --from-git pipes installer to ssh stdin with correct argv"
+# --- assert ssh#2 smoke test receives the same override env. ---
+if ! grep -qx 'root@fake-host' "${TMP}/ssh-args.2"; then
+    echo "FAIL: ssh#2 first arg not 'root@fake-host'"
+    cat "${TMP}/ssh-args.2"
+    exit 1
+fi
+if ! grep -qx "EXTERNAL_DIR=/custom\\\\ external/scripts ZABBIX_CONF=/custom\\\\ zabbix/zabbix_server.conf bash -s" "${TMP}/ssh-args.2"; then
+    echo "FAIL: ssh#2 second arg wrong"
+    cat "${TMP}/ssh-args.2"
+    exit 1
+fi
+
+echo "PASS: deploy-to.sh --from-git pipes installer to ssh stdin with override env"

@@ -23,6 +23,19 @@ HOST="$1"
 shift
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+remote_env_prefix() {
+    local parts=()
+    if [[ -n "${EXTERNAL_DIR:-}" ]]; then
+        parts+=("EXTERNAL_DIR=$(printf '%q' "${EXTERNAL_DIR}")")
+    fi
+    if [[ -n "${ZABBIX_CONF:-}" ]]; then
+        parts+=("ZABBIX_CONF=$(printf '%q' "${ZABBIX_CONF}")")
+    fi
+    printf '%s' "${parts[*]}"
+}
+
+REMOTE_ENV_PREFIX="$(remote_env_prefix)"
+
 if [[ "${1:-}" == "--from-git" ]]; then
     GIT_URL="${2:-}"
     GIT_REF="${3:-main}"
@@ -58,7 +71,8 @@ if [[ "${1:-}" == "--from-git" ]]; then
     fi
 
     # shellcheck disable=SC2029  # Intentional: ${GIT_URL}/${GIT_REF} expand on client side.
-    if ssh "root@${HOST}" "bash -s -- --from-git ${GIT_URL} ${GIT_REF}" < "${tmp_installer}"; then
+    remote_install_cmd="${REMOTE_ENV_PREFIX:+${REMOTE_ENV_PREFIX} }bash -s -- --from-git ${GIT_URL} ${GIT_REF}"
+    if ssh "root@${HOST}" "${remote_install_cmd}" < "${tmp_installer}"; then
         :  # curl-pipe path worked
     else
         echo "[deploy-to] curl-pipe failed; falling back to git-clone-on-remote"
@@ -66,7 +80,7 @@ if [[ "${1:-}" == "--from-git" ]]; then
         ssh "root@${HOST}" "set -e
             tmp=\$(mktemp -d)
             git clone --depth 1 --branch ${GIT_REF} ${GIT_URL} \"\${tmp}\"
-            bash \"\${tmp}/deploy/install-prober.sh\" --from-git ${GIT_URL} ${GIT_REF}
+            ${REMOTE_ENV_PREFIX:+${REMOTE_ENV_PREFIX} }bash \"\${tmp}/deploy/install-prober.sh\" --from-git ${GIT_URL} ${GIT_REF}
             rm -rf \"\${tmp}\""
     fi
 else
@@ -78,11 +92,67 @@ else
         "${REPO_DIR}/" "root@${HOST}:/root/dpi-checker/"
 
     echo "[deploy-to] Running installer on ${HOST}"
-    ssh "root@${HOST}" 'bash /root/dpi-checker/deploy/install-prober.sh /root/dpi-checker'
+    ssh "root@${HOST}" "${REMOTE_ENV_PREFIX:+${REMOTE_ENV_PREFIX} }bash /root/dpi-checker/deploy/install-prober.sh /root/dpi-checker"
 fi
 
 echo "[deploy-to] Smoke test as zabbix user on ${HOST}"
-ssh "root@${HOST}" "runuser -u zabbix -- /usr/lib/zabbix/externalscripts/dpi_probe \
-    target-stub https 443 www.example.com www.example.com 5"
+remote_smoke_cmd="${REMOTE_ENV_PREFIX:+${REMOTE_ENV_PREFIX} }bash -s"
+ssh "root@${HOST}" "${remote_smoke_cmd}" <<'REMOTE'
+set -euo pipefail
+
+externalscripts_from_config() {
+    local conf="$1"
+    local line trimmed value
+    while IFS= read -r line; do
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        if [[ "${trimmed}" == ExternalScripts* ]]; then
+            value="${trimmed#ExternalScripts}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            [[ "${value}" == =* ]] || continue
+            value="${value#=}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%%[[:space:]#]*}"
+            if [[ -n "${value}" ]]; then
+                printf '%s\n' "${value}"
+                return 0
+            fi
+        fi
+    done < "${conf}"
+    return 1
+}
+
+probe_dir=""
+if [[ -n "${ZABBIX_CONF:-}" && -r "${ZABBIX_CONF}" ]]; then
+    probe_dir="$(externalscripts_from_config "${ZABBIX_CONF}" || true)"
+else
+    for conf in /etc/zabbix/zabbix_server.conf /etc/zabbix/zabbix_proxy.conf; do
+        if [[ -r "${conf}" ]]; then
+            probe_dir="$(externalscripts_from_config "${conf}" || true)"
+            break
+        fi
+    done
+fi
+
+if [[ -z "${probe_dir}" ]]; then
+    for dir in \
+        /usr/lib/zabbix/externalscripts \
+        /usr/lib64/zabbix/externalscripts \
+        /usr/share/zabbix/externalscripts \
+        /usr/local/share/zabbix/externalscripts; do
+        if [[ -e "${dir}/dpi_probe" ]]; then
+            probe_dir="${dir}"
+            break
+        fi
+    done
+fi
+
+if [[ -z "${probe_dir}" ]]; then
+    echo "FATAL: cannot find installed dpi_probe; rerun installer with EXTERNAL_DIR=/real/path" >&2
+    exit 1
+fi
+
+runuser -u zabbix -- "${probe_dir}/dpi_probe" \
+    target-stub https 443 www.example.com www.example.com 5
+REMOTE
 
 echo "[deploy-to] Done."
